@@ -2845,9 +2845,11 @@ window.loadState = async function loadState() {
             }
         });
 
-        if (state.renewalComparison.prevData && state.renewalComparison.prevData.length > 0 || state.renewalComparison.currentData && state.renewalComparison.currentData.length > 0) {
-            if(typeof processRenewalComparison === 'function') processRenewalComparison();
-        }
+        if ((state.renewalComparison.prevData && state.renewalComparison.prevData.length > 0) || 
+        (state.renewalComparison.currentData && state.renewalComparison.currentData.length > 0)) {
+        if (typeof processRenewalComparison === 'function') processRenewalComparison();
+        if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
+    }
         if(typeof updateFinancialData === 'function') updateFinancialData();
         if (Object.keys(state.monthlyGoals).length > 0) {
             if(typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
@@ -8036,22 +8038,57 @@ async function fetchReceitaFederalBulk(data, type) {
 
     function renderRenewalComparison() {
     const results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
-    const emptyState = document.getElementById('renewal-empty-state');
+    const prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
+    const currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
+    
+    // 1. Atualiza os números dos Cards no Topo
+    let renovaram = 0;
+    let naoRenovaram = 0;
+    let novos = 0;
 
-    if (!container) return;
+    results.forEach(r => {
+        if (r.status === 'RENOVOU') renovaram++;
+        else if (r.status === 'NÃO RENOVOU') naoRenovaram++;
+        else if (r.status === 'NOVO') novos++;
+    });
+
+    const totalPrev = prevData.length;
+    const totalCurrent = currentData.length;
+    const taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
+
+    // Atualiza os contadores na interface se existirem
+    const cardsValues = [totalPrev, totalCurrent, renovaram, naoRenovaram, `${taxa}%`, novos];
+    const cardElements = document.querySelectorAll('.grid .text-2xl, .grid .text-3xl, .grid h3');
+    
+    // Tenta preencher os elementos dos cards
+    if (cardElements.length >= 6) {
+        cardsValues.forEach((val, idx) => {
+            if (cardElements[idx]) cardElements[idx].innerText = val;
+        });
+    }
+
+    // 2. Procura o container da tabela e o aviso central
+    const emptyState = document.getElementById('renewal-empty-state') || 
+                       Array.from(document.querySelectorAll('div')).find(el => el.innerText && el.innerText.includes('Carregue as duas planilhas') && el.children.length < 4);
+
+    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
 
     if (results.length === 0) {
-        if (emptyState) emptyState.classList.remove('hidden');
-        container.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'flex';
+        if (container) container.innerHTML = '';
         return;
     }
 
-    if (emptyState) emptyState.classList.add('hidden');
+    // Esconde o aviso de "Carregue as duas planilhas"
+    if (emptyState) {
+        emptyState.style.display = 'none';
+        emptyState.classList.add('hidden');
+    }
 
+    if (!container) return;
+
+    // 3. Renderiza as linhas na Tabela
     let html = '';
-    
-    // O índice 'index' está declarado corretamente aqui
     results.forEach((row, index) => {
         let statusBadge = '';
         if (row.status === 'RENOVOU') {
