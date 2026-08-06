@@ -8034,53 +8034,44 @@ async function fetchReceitaFederalBulk(data, type) {
                 document.getElementById('renewal-stat-rate').textContent = '0%';
             }
 
-           function renderRenewalComparison() {
+    function renderRenewalComparison() {
     const results = state.renewalComparison.results || [];
-    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
+    
+    // 1. Procura o container principal onde fica a área do comparativo por cliente
+    const sectionContainer = document.querySelector('#renewal-comparison-section') || 
+                             document.querySelector('div[class*="COMPARATIVO POR CLIENTE"]')?.parentElement ||
+                             document.querySelectorAll('.border-slate-800')[2] ||
+                             document.body;
+
+    if (results.length === 0) return;
+
+    // 2. Esconde apenas a caixa vazia de upload/aviso se ela existir
     const emptyState = document.getElementById('renewal-empty-state');
-
-    if (!container) return;
-
-    if (results.length === 0) {
-        if (emptyState) emptyState.classList.remove('hidden');
-        container.innerHTML = '';
-        return;
-    }
-
     if (emptyState) emptyState.classList.add('hidden');
 
-    // 1. Atualiza os Cards de Métricas no topo
-    let renovaram = 0;
-    let naoRenovaram = 0;
-    let novos = 0;
+    // 3. Procura a tabela ou cria uma nova se não existir no HTML
+    let tableContainer = document.getElementById('renewal-table-wrapper');
+    if (!tableContainer) {
+        // Encontra o elemento onde fica o texto "Carregue as duas planilhas..." e substitui pela tabela
+        const areaAviso = Array.from(document.querySelectorAll('div')).find(el => 
+            el.innerText && el.innerText.includes('Carregue as duas planilhas') && el.children.length < 5
+        );
 
-    results.forEach(r => {
-        if (r.status === 'RENOVOU') renovaram++;
-        else if (r.status === 'NÃO RENOVOU') naoRenovaram++;
-        else if (r.status === 'NOVO') novos++;
-    });
+        if (areaAviso) {
+            tableContainer = document.createElement('div');
+            tableContainer.id = 'renewal-table-wrapper';
+            tableContainer.className = 'overflow-x-auto w-full mt-4';
+            areaAviso.parentNode.replaceChild(tableContainer, areaAviso);
+        }
+    }
 
-    const totalPrev = state.renewalComparison.prevData ? state.renewalComparison.prevData.length : 0;
-    const totalCurrent = state.renewalComparison.currentData ? state.renewalComparison.currentData.length : 0;
-    const taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
+    if (!tableContainer) return;
 
-    // Atualiza os elementos de texto das métricas (se existirem na página)
-    const elPrev = document.getElementById('metric-prev-total');
-    const elCurrent = document.getElementById('metric-current-total');
-    const elRenovaram = document.getElementById('metric-renovaram');
-    const elNaoRenovaram = document.getElementById('metric-nao-renovaram');
-    const elTaxa = document.getElementById('metric-taxa');
-    const elNovos = document.getElementById('metric-novos');
+    // 4. Monta a Tabela Completa em HTML
+    let tableHTML = `
+        
+    `;
 
-    if (elPrev) elPrev.innerText = totalPrev;
-    if (elCurrent) elCurrent.innerText = totalCurrent;
-    if (elRenovaram) elRenovaram.innerText = renovaram;
-    if (elNaoRenovaram) elNaoRenovaram.innerText = naoRenovaram;
-    if (elTaxa) elTaxa.innerText = `${taxa}%`;
-    if (elNovos) elNovos.innerText = novos;
-
-    // 2. Renderiza as linhas na Tabela HTML
-    let html = '';
     results.forEach((row, i) => {
         let statusBadge = '';
         if (row.status === 'RENOVOU') {
@@ -8095,7 +8086,24 @@ async function fetchReceitaFederalBulk(data, type) {
             ? `📇 ${row.matchType}` 
             : `-`;
 
-        html += `
+        tableHTML += `
+            
+        `;
+    });
+
+    tableHTML += `
+            
+            
+                
+                    #
+                    CLIENTE
+                    DOCUMENTO
+                    NOME ANO ANTERIOR
+                    NOME ANO ATUAL
+                    MATCH
+                    STATUS
+                
+            
             
                 ${i + 1}
                 ${row.clientPrev}
@@ -8105,10 +8113,10 @@ async function fetchReceitaFederalBulk(data, type) {
                 ${matchBadge}
                 ${statusBadge}
             
-        `;
-    });
+        
+    `;
 
-    container.innerHTML = html;
+    tableContainer.innerHTML = tableHTML;
 }
 
             function exportRenewalComparison() {
