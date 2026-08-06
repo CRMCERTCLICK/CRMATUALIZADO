@@ -8035,88 +8035,49 @@ async function fetchReceitaFederalBulk(data, type) {
             }
 
     function renderRenewalComparison() {
-    const results = state.renewalComparison.results || [];
-    
-    // 1. Procura o container principal onde fica a área do comparativo por cliente
-    const sectionContainer = document.querySelector('#renewal-comparison-section') || 
-                             document.querySelector('div[class*="COMPARATIVO POR CLIENTE"]')?.parentElement ||
-                             document.querySelectorAll('.border-slate-800')[2] ||
-                             document.body;
-
-    if (results.length === 0) return;
-
-    // 2. Esconde apenas a caixa vazia de upload/aviso se ela existir
+    const results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
+    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
     const emptyState = document.getElementById('renewal-empty-state');
-    if (emptyState) emptyState.classList.add('hidden');
 
-    // 3. Procura a tabela ou cria uma nova se não existir no HTML
-    let tableContainer = document.getElementById('renewal-table-wrapper');
-    if (!tableContainer) {
-        // Encontra o elemento onde fica o texto "Carregue as duas planilhas..." e substitui pela tabela
-        const areaAviso = Array.from(document.querySelectorAll('div')).find(el => 
-            el.innerText && el.innerText.includes('Carregue as duas planilhas') && el.children.length < 5
-        );
+    if (!container) return;
 
-        if (areaAviso) {
-            tableContainer = document.createElement('div');
-            tableContainer.id = 'renewal-table-wrapper';
-            tableContainer.className = 'overflow-x-auto w-full mt-4';
-            areaAviso.parentNode.replaceChild(tableContainer, areaAviso);
-        }
+    if (results.length === 0) {
+        if (emptyState) emptyState.classList.remove('hidden');
+        container.innerHTML = '';
+        return;
     }
 
-    if (!tableContainer) return;
+    if (emptyState) emptyState.classList.add('hidden');
 
-    // 4. Monta a Tabela Completa em HTML
-    let tableHTML = `
-        
-    `;
-
-    results.forEach((row, i) => {
+    let html = '';
+    
+    // O índice 'index' está declarado corretamente aqui
+    results.forEach((row, index) => {
         let statusBadge = '';
         if (row.status === 'RENOVOU') {
-            statusBadge = `🔄 RENOVOU`;
+            statusBadge = '🔄 RENOVOU';
         } else if (row.status === 'NÃO RENOVOU') {
-            statusBadge = `❌ NÃO RENOVOU`;
+            statusBadge = '❌ NÃO RENOVOU';
         } else {
-            statusBadge = `⭐ NOVO`;
+            statusBadge = '⭐ NOVO';
         }
 
-        let matchBadge = row.matchType !== '-' 
-            ? `📇 ${row.matchType}` 
-            : `-`;
+        let matchBadge = (row.matchType && row.matchType !== '-')
+            ? '📇 ' + row.matchType + '' 
+            : '-';
 
-        tableHTML += `
-            
-        `;
+        html += '';
+        html += '' + (index + 1) + '';
+        html += '' + (row.clientPrev || '-') + '';
+        html += '' + (row.doc || '-') + '';
+        html += '' + (row.namePrev || '-') + '';
+        html += '' + (row.nameCurrent || '-') + '';
+        html += '' + matchBadge + '';
+        html += '' + statusBadge + '';
+        html += '';
     });
 
-    tableHTML += `
-            
-            
-                
-                    #
-                    CLIENTE
-                    DOCUMENTO
-                    NOME ANO ANTERIOR
-                    NOME ANO ATUAL
-                    MATCH
-                    STATUS
-                
-            
-            
-                ${i + 1}
-                ${row.clientPrev}
-                ${row.doc}
-                ${row.namePrev}
-                ${row.nameCurrent}
-                ${matchBadge}
-                ${statusBadge}
-            
-        
-    `;
-
-    tableContainer.innerHTML = tableHTML;
+    container.innerHTML = html;
 }
 
             function exportRenewalComparison() {
