@@ -9124,7 +9124,7 @@ if (moedaStatus) moedaStatus.innerText = "Concluído";
 // 1. Função para buscar CNPJ
 async function buscarNomeCNPJ(cnpj) {
     try {
-        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+        const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`)}`);
         if (!response.ok) return "CNPJ não encontrado";
         
         const data = await response.json();
