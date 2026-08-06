@@ -9029,6 +9029,31 @@ if (moedaStatus) moedaStatus.innerText = "Concluído";
         alert("Erro na consulta: " + erro.message);
     }
 };
+
+// COLOQUE O CÓDIGO NOVO AQUI PARA BAIXO:
+
+// 1. Função para buscar CNPJ
+async function buscarNomeCNPJ(cnpj) {
+    try {
+        const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+        if (!response.ok) return "CNPJ não encontrado";
+        
+        const data = await response.json();
+        return data.razao_social;
+    } catch (error) {
+        return "Erro na busca";
+    }
+}
+
+// 2. Função para buscar CPF
+async function buscarNomeCPF(cpf) {
+    // ... restante do código da mensagem anterior ...
+}
+
+// 3. Função principal
+window.enriquecerPlanilha = async function(linhasDaPlanilha) {
+    // ... restante do código da mensagem anterior ...
+};
             window.renderGlobalNotes = renderGlobalNotes;
             window.addGlobalNote = addGlobalNote;
             window.deleteGlobalNote = deleteGlobalNote;
