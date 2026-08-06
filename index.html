@@ -7901,34 +7901,45 @@ async function fetchReceitaFederalBulk(data, type) {
             }
 
             function processRenewalComparison() {
-                const prev = state.renewalComparison.prevData;
-                const current = state.renewalComparison.currentData;
+    const prev = state.renewalComparison.prevData;
+    const current = state.renewalComparison.currentData;
 
-                const indicator = document.getElementById('renewal-processing-indicator');
-                const progressBar = document.getElementById('renewal-progress-bar');
-                if (indicator) {
-                    indicator.classList.remove('hidden');
-                    if (progressBar) progressBar.style.width = '10%';
-                }
+    // Filtro para ignorar linhas de rodapé/totais da planilha
+    const termosInvalidos = ['totais', 'total', 'quantidade', 'valor total', 'inss', 'csll', 'ir', 'pis', 'cofins', 'resumo'];
+    const ehRodape = (item) => {
+        if (!item) return true;
+        let txt = String(item.name || item.nome || item.cliente || item.doc || "").toLowerCase().trim();
+        return termosInvalidos.some(t => txt.startsWith(t) || txt === t);
+    };
 
-                if (prev.length === 0 || current.length === 0) {
-                    if (indicator) indicator.classList.add('hidden');
-                    renderEmptyComparison();
-                    return;
-                }
+    const prevClean = prev.filter(item => !ehRodape(item));
+    const currentClean = current.filter(item => !ehRodape(item));
 
-                const currentByName = new Map();
-                const currentByDoc = new Map();
+    const indicator = document.getElementById('renewal-processing-indicator');
+    const progressBar = document.getElementById('renewal-progress-bar');
+    if (indicator) {
+        indicator.classList.remove('hidden');
+        if (progressBar) progressBar.style.width = '10%';
+    }
 
-                current.forEach(item => {
-                    if (item.name) {
-                        const key = normalizeName(item.name);
-                        if (!currentByName.has(key) || (currentByName.get(key).doc && !item.doc)) {
-                            currentByName.set(key, item);
-                        }
-                    }
-                    if (item.doc) currentByDoc.set(item.doc, item);
-                });
+    if (prevClean.length === 0 || currentClean.length === 0) {
+        if (indicator) indicator.classList.add('hidden');
+        renderEmptyComparison();
+        return;
+    }
+
+    const currentByName = new Map();
+    const currentByDoc = new Map();
+
+    currentClean.forEach(item => {
+        if (item.name) {
+            const key = normalizeName(item.name);
+            if (!currentByName.has(key) || (currentByName.get(key).doc && !item.doc)) {
+                currentByName.set(key, item);
+            }
+        }
+        if (item.doc) currentByDoc.set(item.doc, item);
+    });
 
                 const matched = [];
                 const processedPrev = new Set();
