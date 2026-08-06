@@ -4345,6 +4345,32 @@ async function fetchReceitaFederalBulk(data, type) {
     const total = data.length;
     const targetData = type === 'prev' ? state.renewalComparison.prevData : state.renewalComparison.currentData;
 
+    // Função para encontrar CPF (11) ou CNPJ (14) em qualquer coluna/propriedade
+    function extrairDocumento(obj) {
+        if (!obj) return "";
+        
+        // 1. Tenta propriedades diretas conhecidas
+        let direto = obj.doc || obj.documento || obj.cpfCnpj || obj.cnpj || obj.cpf || obj.Documento || obj.CNPJ || obj.CPF || "";
+        let limpoDireto = String(direto).replace(/\D/g, '');
+        if (limpoDireto.length === 11 || limpoDireto.length === 14) return limpoDireto;
+
+        // 2. Se não achou, vasculha todas as colunas da planilha (incluindo o raw)
+        let todosValores = Object.values(obj);
+        if (obj.raw && typeof obj.raw === 'object') {
+            todosValores = todosValores.concat(Object.values(obj.raw));
+        }
+
+        for (let val of todosValores) {
+            if (val && (typeof val === 'string' || typeof val === 'number')) {
+                let apenasNumeros = String(val).replace(/\D/g, '');
+                if (apenasNumeros.length === 11 || apenasNumeros.length === 14) {
+                    return apenasNumeros;
+                }
+            }
+        }
+        return "";
+    }
+
     try {
         for (let i = 0; i < total; i++) {
             if (state._rfCancelled) {
@@ -4353,40 +4379,55 @@ async function fetchReceitaFederalBulk(data, type) {
             }
 
             let linha = targetData[i];
-            let rawData = linha.raw || {};
-            
-            // Busca o documento no objeto principal ou dentro do RAW
-            let docStr = linha.doc || linha.documento || linha.cpfCnpj || linha.cnpj || linha.cpf || 
-                         rawData.documento || rawData.cpfCnpj || rawData.cnpj || rawData.cpf || 
-                         rawData.CPF || rawData.CNPJ || rawData.Documento || "";
-            
-            // Limpa e deixa só os números
-            let docLimpo = String(docStr).replace(/\D/g, '');
+            let docLimpo = extrairDocumento(linha);
 
             if (progressEl) {
                 progressEl.innerText = `Processando ${i + 1} de ${total} (Atualizados: ${updated})...`;
             }
 
             if (docLimpo.length === 14) {
-                // CNPJ
+                // É CNPJ
                 const resultado = await buscarNomeCNPJ(docLimpo);
                 if (resultado && resultado !== "CNPJ não encontrado" && resultado !== "Erro na busca") {
+                    // Preenche o documento encontrado e o nome da Receita Federal
+                    linha.doc = docLimpo;
+                    linha.documento = docLimpo;
+                    linha.cpfCnpj = docLimpo;
+                    
                     linha.name = resultado;
                     linha.nome = resultado;
                     linha.cliente = resultado;
-                    linha.doc = docLimpo;
-                    if (linha.raw) linha.raw.nome = resultado;
+                    linha.nomeCliente = resultado;
+                    linha.razaoSocial = resultado;
+                    
+                    if (linha.raw) {
+                        linha.raw.doc = docLimpo;
+                        linha.raw.documento = docLimpo;
+                        linha.raw.name = resultado;
+                        linha.raw.nome = resultado;
+                    }
                     updated++;
                 }
             } else if (docLimpo.length === 11) {
-                // CPF
+                // É CPF
                 const resultado = await buscarNomeCPF(docLimpo);
                 if (resultado && resultado !== "Nome não retornado pela API" && resultado !== "Erro na busca") {
+                    linha.doc = docLimpo;
+                    linha.documento = docLimpo;
+                    linha.cpfCnpj = docLimpo;
+
                     linha.name = resultado;
                     linha.nome = resultado;
                     linha.cliente = resultado;
-                    linha.doc = docLimpo;
-                    if (linha.raw) linha.raw.nome = resultado;
+                    linha.nomeCliente = resultado;
+                    linha.razaoSocial = resultado;
+
+                    if (linha.raw) {
+                        linha.raw.doc = docLimpo;
+                        linha.raw.documento = docLimpo;
+                        linha.raw.name = resultado;
+                        linha.raw.nome = resultado;
+                    }
                     updated++;
                 }
             }
@@ -4397,7 +4438,7 @@ async function fetchReceitaFederalBulk(data, type) {
 
         showToast(`Busca concluída! ${updated} registros atualizados.`, 'success');
         
-        // Reprocessa os dados e desenha a tabela novamente
+        // Reprocessa os dados e redesenha a tabela na tela
         if (typeof processRenewalComparison === "function") {
             processRenewalComparison();
         }
