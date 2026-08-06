@@ -7900,11 +7900,11 @@ async function fetchReceitaFederalBulk(data, type) {
                 reader.readAsArrayBuffer(file);
             }
 
-     function processRenewalComparison() {
+    function processRenewalComparison() {
     const prev = state.renewalComparison.prevData || [];
     const current = state.renewalComparison.currentData || [];
 
-    // Helper para extrair qualquer texto disponível no objeto
+    // Helper para extrair o texto/nome de qualquer propriedade da linha
     function getTexto(item) {
         if (!item) return "";
         let raw = item.raw || {};
@@ -7914,7 +7914,7 @@ async function fetchReceitaFederalBulk(data, type) {
         ).trim();
     }
 
-    // Helper para extrair apenas números de documento
+    // Helper para extrair apenas números do documento (CPF/CNPJ)
     function getDoc(item) {
         if (!item) return "";
         let raw = item.raw || {};
@@ -7923,7 +7923,7 @@ async function fetchReceitaFederalBulk(data, type) {
         return String(d).replace(/\D/g, '');
     }
 
-    // Filtra APENAS linhas que contêm rótulos exatos do rodapé/impostos
+    // Termos do rodapé financeiro a serem ignorados
     const termosProibidos = ['totais', 'quantidade:', 'valor total:', 'inss:', 'csll:', 'ir:', 'pis:', 'cofins:'];
 
     function ehRodape(item) {
@@ -7992,7 +7992,7 @@ async function fetchReceitaFederalBulk(data, type) {
         }
     });
 
-    // Novos clientes do Ano Atual
+    // Novos do Ano Atual
     currentClean.forEach(currentItem => {
         if (!matchedCurrentItems.has(currentItem)) {
             let currentNome = getTexto(currentItem);
@@ -8008,9 +8008,10 @@ async function fetchReceitaFederalBulk(data, type) {
         }
     });
 
-    // Salva o resultado e atualiza a tela
+    // Atualiza resultados no estado global
     state.renewalComparison.results = comparisonResults;
 
+    // Atualiza a renderização da tabela e dos cards de resumo
     if (typeof renderRenewalComparison === 'function') {
         renderRenewalComparison();
     }
