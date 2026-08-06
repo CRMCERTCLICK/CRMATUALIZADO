@@ -4340,21 +4340,35 @@ async function fetchReceitaFederalBulk(data, type) {
         btn.innerHTML = ' Buscando...';
     }
 
+    // Palavras do rodapé/resumo da planilha que DEVEM SER IGNORADAS
+    const termosIgnorados = [
+        'totais', 'total', 'quantidade', 'valor total', 
+        'inss', 'csll', 'ir', 'pis', 'cofins', 'resumo'
+    ];
+
     let processed = 0;
     let updated = 0;
     const total = data.length;
     const targetData = type === 'prev' ? state.renewalComparison.prevData : state.renewalComparison.currentData;
 
-    // Função para encontrar CPF (11) ou CNPJ (14) em qualquer coluna/propriedade
+    // Função para extrair CPF ou CNPJ ignorando linhas de totais/impostos
     function extrairDocumento(obj) {
         if (!obj) return "";
+
+        // Verifica se a linha é um texto de rodapé (TOTAIS, INSS, PIS, COFINS, etc.)
+        let textoLinha = String(obj.name || obj.nome || obj.cliente || obj.doc || "").toLowerCase().trim();
+        for (let termo of termosIgnorados) {
+            if (textoLinha.startsWith(termo)) {
+                return "IGNORAR"; // É linha de resumo/rodapé
+            }
+        }
         
         // 1. Tenta propriedades diretas conhecidas
         let direto = obj.doc || obj.documento || obj.cpfCnpj || obj.cnpj || obj.cpf || obj.Documento || obj.CNPJ || obj.CPF || "";
         let limpoDireto = String(direto).replace(/\D/g, '');
         if (limpoDireto.length === 11 || limpoDireto.length === 14) return limpoDireto;
 
-        // 2. Se não achou, vasculha todas as colunas da planilha (incluindo o raw)
+        // 2. Vasculha todas as colunas da planilha
         let todosValores = Object.values(obj);
         if (obj.raw && typeof obj.raw === 'object') {
             todosValores = todosValores.concat(Object.values(obj.raw));
@@ -4381,15 +4395,20 @@ async function fetchReceitaFederalBulk(data, type) {
             let linha = targetData[i];
             let docLimpo = extrairDocumento(linha);
 
+            // Se for linha de rodapé/totais, ignora e pula para a próxima
+            if (docLimpo === "IGNORAR") {
+                processed++;
+                continue;
+            }
+
             if (progressEl) {
                 progressEl.innerText = `Processando ${i + 1} de ${total} (Atualizados: ${updated})...`;
             }
 
             if (docLimpo.length === 14) {
-                // É CNPJ
+                // CNPJ
                 const resultado = await buscarNomeCNPJ(docLimpo);
                 if (resultado && resultado !== "CNPJ não encontrado" && resultado !== "Erro na busca") {
-                    // Preenche o documento encontrado e o nome da Receita Federal
                     linha.doc = docLimpo;
                     linha.documento = docLimpo;
                     linha.cpfCnpj = docLimpo;
@@ -4409,7 +4428,7 @@ async function fetchReceitaFederalBulk(data, type) {
                     updated++;
                 }
             } else if (docLimpo.length === 11) {
-                // É CPF
+                // CPF
                 const resultado = await buscarNomeCPF(docLimpo);
                 if (resultado && resultado !== "Nome não retornado pela API" && resultado !== "Erro na busca") {
                     linha.doc = docLimpo;
@@ -4438,7 +4457,7 @@ async function fetchReceitaFederalBulk(data, type) {
 
         showToast(`Busca concluída! ${updated} registros atualizados.`, 'success');
         
-        // Reprocessa os dados e redesenha a tabela na tela
+        // Reprocessa os dados e redesenha a tabela
         if (typeof processRenewalComparison === "function") {
             processRenewalComparison();
         }
