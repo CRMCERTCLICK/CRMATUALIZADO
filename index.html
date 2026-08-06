@@ -4329,159 +4329,70 @@ async function fetchReceitaFederalBulk(data, type) {
         showToast('Já existe uma busca em andamento.', 'error');
         return;
     }
-
+    
     state._rfFetching = true;
-    state._rfCancelled = false;
 
-    const progressEl = document.getElementById(`rf-${type}-progress`);
-    const btn = document.getElementById(`rf-${type}-btn`);
+    // Identifica os elementos da tela para mostrar o progresso
+    const progressId = type === 'prev' ? 'rf-prev-progress' : 'rf-current-progress';
+    const progressEl = document.getElementById(progressId);
+    const btnId = type === 'prev' ? 'rf-prev-btn' : 'rf-current-btn';
+    const btnEl = document.getElementById(btnId);
 
-    if (progressEl) progressEl.classList.remove('hidden');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = ' Buscando...';
+    if (progressEl) {
+        progressEl.classList.remove('hidden');
+        progressEl.innerText = `Iniciando busca para ${data.length} registros...`;
     }
+    if (btnEl) btnEl.disabled = true;
 
-    // Palavras do rodapé/resumo da planilha que DEVEM SER IGNORADAS
-    const termosIgnorados = [
-        'totais', 'total', 'quantidade', 'valor total', 
-        'inss', 'csll', 'ir', 'pis', 'cofins', 'resumo'
-    ];
+    let atualizados = 0;
 
-    let processed = 0;
-    let updated = 0;
-    const total = data.length;
-    const targetData = type === 'prev' ? state.renewalComparison.prevData : state.renewalComparison.currentData;
+    // Loop que passa por cada cliente com a pausa de segurança
+    for (let i = 0; i < data.length; i++) {
+        const item = data[i];
+        const doc = String(item.doc || '').replace(/\D/g, ''); // Limpa a formatação
 
-    // Função para extrair CPF ou CNPJ ignorando linhas de totais/impostos
-    function extrairDocumento(obj) {
-        if (!obj) return "";
-
-        // Verifica se a linha é um texto de rodapé (TOTAIS, INSS, PIS, COFINS, etc.)
-        let textoLinha = String(obj.name || obj.nome || obj.cliente || obj.doc || "").toLowerCase().trim();
-        for (let termo of termosIgnorados) {
-            if (textoLinha.startsWith(termo)) {
-                return "IGNORAR"; // É linha de resumo/rodapé
-            }
-        }
-        
-        // 1. Tenta propriedades diretas conhecidas
-        let direto = obj.doc || obj.documento || obj.cpfCnpj || obj.cnpj || obj.cpf || obj.Documento || obj.CNPJ || obj.CPF || "";
-        let limpoDireto = String(direto).replace(/\D/g, '');
-        if (limpoDireto.length === 11 || limpoDireto.length === 14) return limpoDireto;
-
-        // 2. Vasculha todas as colunas da planilha
-        let todosValores = Object.values(obj);
-        if (obj.raw && typeof obj.raw === 'object') {
-            todosValores = todosValores.concat(Object.values(obj.raw));
-        }
-
-        for (let val of todosValores) {
-            if (val && (typeof val === 'string' || typeof val === 'number')) {
-                let apenasNumeros = String(val).replace(/\D/g, '');
-                if (apenasNumeros.length === 11 || apenasNumeros.length === 14) {
-                    return apenasNumeros;
-                }
-            }
-        }
-        return "";
-    }
-
-    try {
-        for (let i = 0; i < total; i++) {
-            if (state._rfCancelled) {
-                showToast('Busca cancelada.', 'info');
-                break;
-            }
-
-            let linha = targetData[i];
-            let docLimpo = extrairDocumento(linha);
-
-            // Se for linha de rodapé/totais, ignora e pula para a próxima
-            if (docLimpo === "IGNORAR") {
-                processed++;
-                continue;
-            }
-
+        // Só busca se for CNPJ (14 dígitos)
+        if (doc.length === 14) {
             if (progressEl) {
-                progressEl.innerText = `Processando ${i + 1} de ${total} (Atualizados: ${updated})...`;
+                progressEl.innerText = `Buscando ${i + 1} de ${data.length}... aguarde.`;
             }
 
-            if (docLimpo.length === 14) {
-                // CNPJ
-                const resultado = await buscarNomeCNPJ(docLimpo);
-                if (resultado && resultado !== "CNPJ não encontrado" && resultado !== "Erro na busca") {
-                    linha.doc = docLimpo;
-                    linha.documento = docLimpo;
-                    linha.cpfCnpj = docLimpo;
-                    
-                    linha.name = resultado;
-                    linha.nome = resultado;
-                    linha.cliente = resultado;
-                    linha.nomeCliente = resultado;
-                    linha.razaoSocial = resultado;
-                    
-                    if (linha.raw) {
-                        linha.raw.doc = docLimpo;
-                        linha.raw.documento = docLimpo;
-                        linha.raw.name = resultado;
-                        linha.raw.nome = resultado;
+            try {
+                // Usa o Proxy para evitar bloqueio de CORS
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent('https://brasilapi.com.br/api/cnpj/v1/' + doc)}`;
+                const response = await fetch(proxyUrl);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.razao_social) {
+                        item.name = result.razao_social; // Atualiza o nome na memória
+                        atualizados++;
                     }
-                    updated++;
                 }
-            } else if (docLimpo.length === 11) {
-                // CPF
-                const resultado = await buscarNomeCPF(docLimpo);
-                if (resultado && resultado !== "Nome não retornado pela API" && resultado !== "Erro na busca") {
-                    linha.doc = docLimpo;
-                    linha.documento = docLimpo;
-                    linha.cpfCnpj = docLimpo;
-
-                    linha.name = resultado;
-                    linha.nome = resultado;
-                    linha.cliente = resultado;
-                    linha.nomeCliente = resultado;
-                    linha.razaoSocial = resultado;
-
-                    if (linha.raw) {
-                        linha.raw.doc = docLimpo;
-                        linha.raw.documento = docLimpo;
-                        linha.raw.name = resultado;
-                        linha.raw.nome = resultado;
-                    }
-                    updated++;
-                }
+            } catch (error) {
+                console.warn(`Erro ao buscar CNPJ ${doc}:`, error);
             }
 
-            processed++;
-            await new Promise(resolve => setTimeout(resolve, 300));
-        }
-
-        showToast(`Busca concluída! ${updated} registros atualizados.`, 'success');
-        
-        // Reprocessa os dados e redesenha a tabela
-        if (typeof processRenewalComparison === "function") {
-            processRenewalComparison();
-        }
-        if (typeof renderRenewalComparison === "function") {
-            renderRenewalComparison();
-        }
-
-    } catch (error) {
-        console.error("Erro no processamento em lote:", error);
-        showToast('Erro durante a busca.', 'error');
-    } finally {
-        state._rfFetching = false;
-        
-        if (progressEl) {
-            progressEl.innerText = `Concluído: ${updated} atualizados.`;
-            setTimeout(() => progressEl.classList.add('hidden'), 4000);
-        }
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = ' Buscar Nomes na Receita Federal';
+            // O SEGREDO: Pausa de 1.5 segundos (1500ms) antes de buscar o próximo CNPJ
+            await new Promise(resolve => setTimeout(resolve, 1500));
         }
     }
+
+    // Finaliza o processo
+    state._rfFetching = false;
+    if (progressEl) {
+        progressEl.innerText = `Concluído: ${atualizados} atualizados.`;
+        progressEl.classList.add('text-emerald-500');
+        progressEl.classList.remove('text-slate-400');
+    }
+    if (btnEl) btnEl.disabled = false;
+
+    showToast(`Busca concluída! ${atualizados} registros atualizados.`, 'success');
+
+    // Força a atualização da tabela e dos cards na tela com os nomes novos
+    if (typeof processRenewalComparison === 'function') processRenewalComparison();
+    if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
+    if (typeof saveState === 'function') saveState();
 }
     
             // ============================================================
@@ -9124,7 +9035,7 @@ if (moedaStatus) moedaStatus.innerText = "Concluído";
 // 1. Função para buscar CNPJ
 async function buscarNomeCNPJ(cnpj) {
     try {
-        const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`)}`);
+        const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`)}`);
         if (!response.ok) return "CNPJ não encontrado";
         
         const data = await response.json();
