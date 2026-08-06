@@ -8990,11 +8990,39 @@ function applyRoleRestrictions() {
         console.log("Biometria Nacional:", dadosNacional);
         console.log("Biometria Local:", dadosLocal);
 
-        let mensagem = `✅ Resultado da Biometria - CPF: ${cpf}\n\n`;
-        mensagem += `🌍 BASE NACIONAL:\n${JSON.stringify(dadosNacional, null, 2)}\n\n`;
-        mensagem += `📍 BASE LOCAL:\n${JSON.stringify(dadosLocal, null, 2)}`;
+        // Pegamos os elementos visuais na tela
+const resultPane = document.getElementById('biometry-result-pane');
+const resultTitle = document.getElementById('biometry-result-title');
+const badgeWrapper = document.getElementById('biometry-badge-wrapper');
+const reqId = document.getElementById('biometry-req-id');
+const moedaStatus = document.getElementById('biometry-moeda-status');
 
-        alert(mensagem);
+if (resultPane) {
+    resultPane.classList.remove('hidden'); // Mostra a caixa preta
+}
+
+// Analisando se encontrou nas bases
+const nacionalOk = dadosNacional && dadosNacional.IsOk === true;
+const localOk = dadosLocal && dadosLocal.IsOk === true;
+
+// Montando os textos
+let textoNacional = nacionalOk ? "Biometria encontrada com sucesso" : "Não possui biometria";
+let textoLocal = localOk ? "Biometria encontrada com sucesso" : "Não possui biometria na base local";
+
+// Injetando no HTML
+if (resultTitle) resultTitle.innerText = `Resultado da Consulta - CPF: ${cpf}`;
+
+if (badgeWrapper) {
+    badgeWrapper.innerHTML = `
+        
+            🌍 Base Nacional: ${textoNacional}
+            📍 Base Local: ${textoLocal}
+        
+    `;
+}
+
+if (reqId) reqId.innerText = "Sucesso";
+if (moedaStatus) moedaStatus.innerText = "Concluído";
 
     } catch (erro) {
         console.error("Erro na consulta de biometria:", erro);
