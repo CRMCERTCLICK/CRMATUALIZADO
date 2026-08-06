@@ -4353,9 +4353,14 @@ async function fetchReceitaFederalBulk(data, type) {
             }
 
             let linha = targetData[i];
+            let rawData = linha.raw || {};
             
-            // Busca o documento e limpa a pontuação
-            let docStr = linha.documento || linha.cpfCnpj || linha.cnpj || linha.cpf || linha.Documento || linha.CNPJ || linha.CPF || "";
+            // Busca o documento no objeto principal ou dentro do RAW
+            let docStr = linha.doc || linha.documento || linha.cpfCnpj || linha.cnpj || linha.cpf || 
+                         rawData.documento || rawData.cpfCnpj || rawData.cnpj || rawData.cpf || 
+                         rawData.CPF || rawData.CNPJ || rawData.Documento || "";
+            
+            // Limpa e deixa só os números
             let docLimpo = String(docStr).replace(/\D/g, '');
 
             if (progressEl) {
@@ -4363,30 +4368,25 @@ async function fetchReceitaFederalBulk(data, type) {
             }
 
             if (docLimpo.length === 14) {
-                // É CNPJ! Busca na API
+                // CNPJ
                 const resultado = await buscarNomeCNPJ(docLimpo);
                 if (resultado && resultado !== "CNPJ não encontrado" && resultado !== "Erro na busca") {
-                    // Salva o nome consultado em TODAS as chaves possíveis para a tabela ler
+                    linha.name = resultado;
                     linha.nome = resultado;
                     linha.cliente = resultado;
-                    linha.nomeCliente = resultado;
-                    linha.razaoSocial = resultado;
-                    linha.Nome = resultado;
-                    linha.Cliente = resultado;
-                    linha.RazaoSocial = resultado;
+                    linha.doc = docLimpo;
+                    if (linha.raw) linha.raw.nome = resultado;
                     updated++;
                 }
             } else if (docLimpo.length === 11) {
-                // É CPF! Busca na API
+                // CPF
                 const resultado = await buscarNomeCPF(docLimpo);
                 if (resultado && resultado !== "Nome não retornado pela API" && resultado !== "Erro na busca") {
+                    linha.name = resultado;
                     linha.nome = resultado;
                     linha.cliente = resultado;
-                    linha.nomeCliente = resultado;
-                    linha.razaoSocial = resultado;
-                    linha.Nome = resultado;
-                    linha.Cliente = resultado;
-                    linha.RazaoSocial = resultado;
+                    linha.doc = docLimpo;
+                    if (linha.raw) linha.raw.nome = resultado;
                     updated++;
                 }
             }
@@ -4397,14 +4397,13 @@ async function fetchReceitaFederalBulk(data, type) {
 
         showToast(`Busca concluída! ${updated} registros atualizados.`, 'success');
         
-        // Reprocessa a comparação para atualizar 'Nome Ano Anterior' e 'Nome Ano Atual' na tela
+        // Reprocessa os dados e desenha a tabela novamente
         if (typeof processRenewalComparison === "function") {
             processRenewalComparison();
-        } else if (typeof renderRenewalComparison === "function") {
+        }
+        if (typeof renderRenewalComparison === "function") {
             renderRenewalComparison();
         }
-        
-        console.log("Planilha Final:", targetData);
 
     } catch (error) {
         console.error("Erro no processamento em lote:", error);
@@ -4422,7 +4421,6 @@ async function fetchReceitaFederalBulk(data, type) {
         }
     }
 }
-
     
             // ============================================================
             //  ATUALIZAÇÃO EM MASSA OTIMIZADA
