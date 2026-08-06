@@ -2845,11 +2845,11 @@ window.loadState = async function loadState() {
             }
         });
 
-        if ((state.renewalComparison.prevData && state.renewalComparison.prevData.length > 0) || 
-        (state.renewalComparison.currentData && state.renewalComparison.currentData.length > 0)) {
-        if (typeof processRenewalComparison === 'function') processRenewalComparison();
-        if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
-    }
+        if ((state.renewalComparison && state.renewalComparison.prevData && state.renewalComparison.prevData.length > 0) || 
+    (state.renewalComparison && state.renewalComparison.currentData && state.renewalComparison.currentData.length > 0)) {
+    if (typeof processRenewalComparison === 'function') processRenewalComparison();
+    if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
+}
         if(typeof updateFinancialData === 'function') updateFinancialData();
         if (Object.keys(state.monthlyGoals).length > 0) {
             if(typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
