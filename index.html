@@ -8034,76 +8034,82 @@ async function fetchReceitaFederalBulk(data, type) {
                 document.getElementById('renewal-stat-rate').textContent = '0%';
             }
 
-            function renderRenewalComparison() {
-                const stats = state.renewalComparison.stats;
-                const matched = state.renewalComparison.matched;
+           function renderRenewalComparison() {
+    const results = state.renewalComparison.results || [];
+    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
+    const emptyState = document.getElementById('renewal-empty-state');
 
-                document.getElementById('renewal-stat-total-prev').textContent = stats.totalPrev || 0;
-                document.getElementById('renewal-stat-total-current').textContent = stats.totalCurrent || 0;
-                document.getElementById('renewal-stat-renewed').textContent = stats.renewed || 0;
-                document.getElementById('renewal-stat-not-renewed').textContent = stats.notRenewed || 0;
-                document.getElementById('renewal-stat-new').textContent = stats.new || 0;
-                document.getElementById('renewal-stat-rate').textContent = stats.rate + '%';
+    if (!container) return;
 
-                const container = document.getElementById('renewal-comparison-container');
-                const countEl = document.getElementById('renewal-comparison-count');
+    if (results.length === 0) {
+        if (emptyState) emptyState.classList.remove('hidden');
+        container.innerHTML = '';
+        return;
+    }
 
-                if (!matched || matched.length === 0) {
-                    renderEmptyComparison();
-                    return;
-                }
+    if (emptyState) emptyState.classList.add('hidden');
 
-                countEl.textContent = `${matched.length} registros`;
+    // 1. Atualiza os Cards de Métricas no topo
+    let renovaram = 0;
+    let naoRenovaram = 0;
+    let novos = 0;
 
-                let tableHtml = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Cliente</th>
-                                <th>Documento</th>
-                                <th>Nome Ano Anterior</th>
-                                <th>Nome Ano Atual</th>
-                                <th>Match</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
+    results.forEach(r => {
+        if (r.status === 'RENOVOU') renovaram++;
+        else if (r.status === 'NÃO RENOVOU') naoRenovaram++;
+        else if (r.status === 'NOVO') novos++;
+    });
 
-                matched.forEach((item, index) => {
-                    const statusLabel = item.status === 'renewed' ? '🔄 Renovou' : 
-                                       item.status === 'new' ? '⭐ Novo' : '❌ Não Renovou';
-                    const statusClass = item.status === 'renewed' ? 'renewed' : 
-                                       item.status === 'new' ? 'new' : 'not-renewed';
-                    const matchLabel = item.matchType === 'nome' ? '🏢 Nome' :
-                                      item.matchType === 'cnpj' ? '📄 CNPJ' : '➖';
-                    const docFormatted = item.doc && item.doc.length === 14 ? 
-                        item.doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') :
-                        item.doc || '-';
+    const totalPrev = state.renewalComparison.prevData ? state.renewalComparison.prevData.length : 0;
+    const totalCurrent = state.renewalComparison.currentData ? state.renewalComparison.currentData.length : 0;
+    const taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
 
-                    tableHtml += `
-                        <tr>
-                            <td class="text-slate-500">${index + 1}</td>
-                            <td class="font-medium text-slate-200">${escapeHTML(item.name)}</td>
-                            <td class="font-mono text-slate-300 text-[10px]">${escapeHTML(docFormatted)}</td>
-                            <td>${item.prevName ? escapeHTML(item.prevName) : '<span class="text-slate-500 italic">Não presente</span>'}</td>
-                            <td>${item.currentName ? escapeHTML(item.currentName) : '<span class="text-slate-500 italic">Não presente</span>'}</td>
-                            <td><span class="text-[9px] text-slate-400">${matchLabel}</span></td>
-                            <td><span class="renewal-badge ${statusClass}">${statusLabel}</span></td>
-                        </tr>
-                    `;
-                });
+    // Atualiza os elementos de texto das métricas (se existirem na página)
+    const elPrev = document.getElementById('metric-prev-total');
+    const elCurrent = document.getElementById('metric-current-total');
+    const elRenovaram = document.getElementById('metric-renovaram');
+    const elNaoRenovaram = document.getElementById('metric-nao-renovaram');
+    const elTaxa = document.getElementById('metric-taxa');
+    const elNovos = document.getElementById('metric-novos');
 
-                tableHtml += `
-                        </tbody>
-                    </table>
-                `;
+    if (elPrev) elPrev.innerText = totalPrev;
+    if (elCurrent) elCurrent.innerText = totalCurrent;
+    if (elRenovaram) elRenovaram.innerText = renovaram;
+    if (elNaoRenovaram) elNaoRenovaram.innerText = naoRenovaram;
+    if (elTaxa) elTaxa.innerText = `${taxa}%`;
+    if (elNovos) elNovos.innerText = novos;
 
-                container.innerHTML = tableHtml;
+    // 2. Renderiza as linhas na Tabela HTML
+    let html = '';
+    results.forEach((row, i) => {
+        let statusBadge = '';
+        if (row.status === 'RENOVOU') {
+            statusBadge = `🔄 RENOVOU`;
+        } else if (row.status === 'NÃO RENOVOU') {
+            statusBadge = `❌ NÃO RENOVOU`;
+        } else {
+            statusBadge = `⭐ NOVO`;
+        }
 
-                document.getElementById('dash-renewals').textContent = stats.renewed || 0;
-            }
+        let matchBadge = row.matchType !== '-' 
+            ? `📇 ${row.matchType}` 
+            : `-`;
+
+        html += `
+            
+                ${i + 1}
+                ${row.clientPrev}
+                ${row.doc}
+                ${row.namePrev}
+                ${row.nameCurrent}
+                ${matchBadge}
+                ${statusBadge}
+            
+        `;
+    });
+
+    container.innerHTML = html;
+}
 
             function exportRenewalComparison() {
                 const matched = state.renewalComparison.matched;
