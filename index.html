@@ -7841,68 +7841,75 @@ async function fetchReceitaFederalBulk(data, type) {
                 copyText(report, 'Relatório copiado!');
             }
 
-            // ============================================================
-            //  RENOVAÇÕES ANUAIS - COMPARATIVO CORRIGIDO
-            // ============================================================
-            function handleRenewalUpload(event, type) {
-                const file = event.target.files[0];
-                if (!file) return;
+          // ============================================================
+//  RENOVAÇÕES ANUAIS - COMPARATIVO CORRIGIDO E AUTOMÁTICO
+// ============================================================
 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+function handleRenewalUpload(event, type) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-                        if (!jsonData || jsonData.length === 0) {
-                            showToast('A planilha está vazia.', 'error');
-                            return;
-                        }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
-                        const headers = Object.keys(jsonData[0]);
-                        const nameCol = headers.find(h => /cliente|nome|name|empresa|razao|razao social|razaosocial|razao_social|titular|contratante/i.test(h)) || headers[0];
-                        const docCol = headers.find(h => /cpf|cnpj|documento|doc|registro|inscrição/i.test(h)) || null;
-
-                        const processedData = jsonData.map(row => {
-                            const name = String(row[nameCol] || '').trim();
-                            const doc = docCol ? String(row[docCol] || '').replace(/\D/g, '') : '';
-                            return { name, doc, raw: row };
-                        }).filter(item => item.name.length > 0 || item.doc.length > 0);
-
-                        if (processedData.length === 0) {
-                            showToast('Nenhum cliente válido encontrado na coluna "Cliente".', 'error');
-                            return;
-                        }
-
-                        if (type === 'prev') {
-                            state.renewalComparison.prevData = processedData;
-                            document.getElementById('renewal-prev-stats').classList.remove('hidden');
-                            document.getElementById('renewal-prev-count').textContent = processedData.length;
-                            document.getElementById('renewal-prev-status').textContent = '✅ Carregado';
-                            document.getElementById('renewal-prev-status').className = 'text-emerald-500';
-                            showToast(`✅ ${processedData.length} clientes do ano anterior carregados.`);
-                        } else {
-                            state.renewalComparison.currentData = processedData;
-                            document.getElementById('renewal-current-stats').classList.remove('hidden');
-                            document.getElementById('renewal-current-count').textContent = processedData.length;
-                            document.getElementById('renewal-current-status').textContent = '✅ Carregado';
-                            document.getElementById('renewal-current-status').className = 'text-emerald-500';
-                            showToast(`✅ ${processedData.length} clientes do ano atual carregados.`);
-                        }
-
-                        processRenewalComparison();
-                        saveState();
-                    } catch (error) {
-                        console.error('Erro ao processar planilha:', error);
-                        showToast('Erro ao processar o arquivo.', 'error');
-                    }
-                };
-                reader.readAsArrayBuffer(file);
+            if (!jsonData || jsonData.length === 0) {
+                showToast('A planilha está vazia.', 'error');
+                return;
             }
 
-    function processRenewalComparison() {
+            const headers = Object.keys(jsonData[0]);
+            const nameCol = headers.find(h => /cliente|nome|name|empresa|razao|razao social|razaosocial|razao_social|titular|contratante/i.test(h)) || headers[0];
+            const docCol = headers.find(h => /cpf|cnpj|documento|doc|registro|inscrição/i.test(h)) || null;
+
+            const processedData = jsonData.map(row => {
+                const name = String(row[nameCol] || '').trim();
+                const doc = docCol ? String(row[docCol] || '').replace(/\D/g, '') : '';
+                return { name, doc, raw: row };
+            }).filter(item => item.name.length > 0 || item.doc.length > 0);
+
+            if (processedData.length === 0) {
+                showToast('Nenhum cliente válido encontrado na coluna "Cliente".', 'error');
+                return;
+            }
+
+            if (type === 'prev') {
+                state.renewalComparison.prevData = processedData;
+                document.getElementById('renewal-prev-stats').classList.remove('hidden');
+                document.getElementById('renewal-prev-count').textContent = processedData.length;
+                document.getElementById('renewal-prev-status').textContent = '✅ Carregado';
+                document.getElementById('renewal-prev-status').className = 'text-emerald-500';
+                showToast(`✅ ${processedData.length} clientes do ano anterior carregados.`);
+            } else {
+                state.renewalComparison.currentData = processedData;
+                document.getElementById('renewal-current-stats').classList.remove('hidden');
+                document.getElementById('renewal-current-count').textContent = processedData.length;
+                document.getElementById('renewal-current-status').textContent = '✅ Carregado';
+                document.getElementById('renewal-current-status').className = 'text-emerald-500';
+                showToast(`✅ ${processedData.length} clientes do ano atual carregados.`);
+            }
+
+            // Executa o cruzamento e renderiza a tela na hora
+            processRenewalComparison();
+            if (typeof renderRenewalComparison === 'function') {
+                renderRenewalComparison();
+            }
+            if (typeof saveState === 'function') {
+                saveState();
+            }
+        } catch (error) {
+            console.error('Erro ao processar planilha:', error);
+            showToast('Erro ao processar o arquivo.', 'error');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function processRenewalComparison() {
     const prev = state.renewalComparison.prevData || [];
     const current = state.renewalComparison.currentData || [];
 
@@ -8013,10 +8020,86 @@ async function fetchReceitaFederalBulk(data, type) {
     // Atualiza resultados no estado global
     state.renewalComparison.results = comparisonResults;
 
-    // Atualiza a renderização da tabela e dos cards de resumo
+    // Dispara a renderização imediata da interface
     if (typeof renderRenewalComparison === 'function') {
         renderRenewalComparison();
     }
+}
+
+// Função de renderização completa e segura
+function renderRenewalComparison() {
+    const results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
+    const prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
+    const currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
+
+    // 1. Atualiza os Contadores dos Cards Superiores
+    let renovaram = 0;
+    let naoRenovaram = 0;
+    let novos = 0;
+
+    results.forEach(r => {
+        if (r.status === 'RENOVOU') renovaram++;
+        else if (r.status === 'NÃO RENOVOU') naoRenovaram++;
+        else if (r.status === 'NOVO') novos++;
+    });
+
+    const totalPrev = prevData.length;
+    const totalCurrent = currentData.length;
+    const taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
+
+    const cardsValues = [totalPrev, totalCurrent, renovaram, naoRenovaram, `${taxa}%`, novos];
+    const cardElements = document.querySelectorAll('.grid .text-2xl, .grid .text-3xl, .grid h3');
+    
+    if (cardElements.length >= 6) {
+        cardsValues.forEach((val, idx) => {
+            if (cardElements[idx]) cardElements[idx].innerText = val;
+        });
+    }
+
+    // 2. Preenche a Tabela e Esconde a caixa de estado vazio
+    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
+    const emptyState = document.getElementById('renewal-empty-state');
+
+    if (!container) return;
+
+    if (results.length === 0) {
+        if (emptyState) emptyState.style.display = 'flex';
+        container.innerHTML = '';
+        return;
+    }
+
+    if (emptyState) {
+        emptyState.style.display = 'none';
+        emptyState.classList.add('hidden');
+    }
+
+    let html = '';
+    results.forEach((row, index) => {
+        let statusBadge = '';
+        if (row.status === 'RENOVOU') {
+            statusBadge = '<span class="px-2 py-1 text-xs rounded bg-emerald-900/50 text-emerald-400 border border-emerald-500/30">🔄 RENOVOU</span>';
+        } else if (row.status === 'NÃO RENOVOU') {
+            statusBadge = '<span class="px-2 py-1 text-xs rounded bg-rose-900/50 text-rose-400 border border-rose-500/30">❌ NÃO RENOVOU</span>';
+        } else {
+            statusBadge = '<span class="px-2 py-1 text-xs rounded bg-amber-900/50 text-amber-400 border border-amber-500/30">⭐ NOVO</span>';
+        }
+
+        let matchBadge = (row.matchType && row.matchType !== '-')
+            ? '<span class="text-xs text-slate-400">📇 ' + row.matchType + '</span>' 
+            : '<span class="text-slate-600">-</span>';
+
+        html += '<tr class="border-b border-slate-800 hover:bg-slate-800/40 transition">';
+        html += '<td class="p-3 text-slate-400 font-mono text-sm">' + (index + 1) + '</td>';
+        html += '<td class="p-3 text-slate-200 text-sm font-medium">' + (row.clientPrev || '-') + '</td>';
+        html += '<td class="p-3 text-slate-400 font-mono text-sm">' + (row.doc || '-') + '</td>';
+        html += '<td class="p-3 text-slate-200 text-sm">' + (row.namePrev || '-') + '</td>';
+        html += '<td class="p-3 text-slate-200 text-sm">' + (row.nameCurrent || '-') + '</td>';
+        html += '<td class="p-3 text-sm">' + matchBadge + '</td>';
+        html += '<td class="p-3 text-sm">' + statusBadge + '</td>';
+        html += '</tr>';
+    });
+
+    container.innerHTML = html;
 }
 
             function renderEmptyComparison() {
