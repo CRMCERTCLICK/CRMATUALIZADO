@@ -4305,21 +4305,24 @@ function applyRoleRestrictions() {
             //  RECEITA FEDERAL - BUSCA EM MASSA CORRIGIDA
             // ============================================================
             function fetchReceitaFederalForPrev() {
-                const data = state.renewalComparison.prevData;
-                if (!data || data.length === 0) {
-                    showToast('Carregue a planilha do ano anterior primeiro.', 'error');
-                    return;
-                }
-                fetchReceitaFederalBulk(data, 'prev');
-            }
+    const data = state.renewalComparison.prevData;
+    if (!data || data.length === 0) {
+        showToast('Carregue a planilha do ano anterior primeiro.', 'error');
+        return;
+    }
+    fetchReceitaFederalBulk(data, 'prev');
+}
 
-            function fetchReceitaFederalForCurrent() {
-                const data = state.renewalComparison.currentData;
-                if (!data || data.length === 0) {
-                    showToast('Carregue a planilha do ano atual primeiro.', 'error');
-                    return;
-                }
-               async function fetchReceitaFederalBulk(data, type) {
+function fetchReceitaFederalForCurrent() {
+    const data = state.renewalComparison.currentData;
+    if (!data || data.length === 0) {
+        showToast('Carregue a planilha do ano atual primeiro.', 'error');
+        return;
+    }
+    fetchReceitaFederalBulk(data, 'current');
+}
+
+async function fetchReceitaFederalBulk(data, type) {
     if (state._rfFetching) {
         showToast('Já existe uma busca em andamento.', 'error');
         return;
@@ -4343,7 +4346,6 @@ function applyRoleRestrictions() {
     const targetData = type === 'prev' ? state.renewalComparison.prevData : state.renewalComparison.currentData;
 
     try {
-        // Inicia o Loop passando por cada linha da planilha
         for (let i = 0; i < total; i++) {
             if (state._rfCancelled) {
                 showToast('Busca cancelada.', 'info');
@@ -4352,7 +4354,6 @@ function applyRoleRestrictions() {
 
             let linha = targetData[i];
             
-            // Pega a coluna do documento e limpa a pontuação
             let docStr = linha.documento || linha.cpfCnpj || linha.cnpj || linha.cpf || linha.Documento || linha.CNPJ || linha.CPF || "";
             let docLimpo = String(docStr).replace(/\D/g, '');
 
@@ -4361,30 +4362,25 @@ function applyRoleRestrictions() {
             }
 
             if (docLimpo.length === 14) {
-                // É CNPJ! Busca na BrasilAPI
                 const resultado = await buscarNomeCNPJ(docLimpo);
                 if (resultado && resultado !== "CNPJ não encontrado" && resultado !== "Erro na busca") {
-                    linha.nome = resultado; // Salva o nome (Ajuste para linha.Nome se a coluna for maiúscula)
+                    linha.nome = resultado;
                     updated++;
                 }
             } else if (docLimpo.length === 11) {
-                // É CPF! Busca na API Biometria
                 const resultado = await buscarNomeCPF(docLimpo);
                 if (resultado && resultado !== "Nome não retornado pela API" && resultado !== "Erro na busca") {
-                    linha.nome = resultado; // Salva o nome
+                    linha.nome = resultado;
                     updated++;
                 }
             }
 
             processed++;
-            // Pausa pequena de 300ms para não sobrecarregar as APIs
             await new Promise(resolve => setTimeout(resolve, 300));
         }
 
         showToast(`Busca concluída! ${updated} registros atualizados.`, 'success');
         
-        // === ATUALIZAR A TELA ===
-        // Aqui chamamos a função que desenha a tabela novamente para mostrar os nomes.
         if (typeof renderRenewalComparison === "function") {
             renderRenewalComparison();
         } else if (typeof updateTables === "function") {
@@ -4408,81 +4404,7 @@ function applyRoleRestrictions() {
             btn.innerHTML = ' Buscar Nomes na Receita Federal';
         }
     }
-                }
-                state._rfFetching = true;
-                state._rfCancelled = false;
-                
-                const progressEl = document.getElementById(`rf-${type}-progress`);
-                const btn = document.getElementById(`rf-${type}-btn`);
-                
-                progressEl.classList.remove('hidden');
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner loading"></i> Buscando...';
-
-                let processed = 0;
-                let updated = 0;
-                const total = data.length;
-                const targetData = type === 'prev' ? state.renewalComparison.prevData : state.renewalComparison.currentData;
-
-                function processNext(index) {
-                    if (index >= total || state._rfCancelled) {
-                        finishBulkFetch(updated, type);
-                        return;
-                    }
-
-                    const item = targetData[index];
-                    const doc = item.doc.replace(/\D/g, '');
-                    
-                    progressEl.textContent = `⏳ Processando ${index + 1}/${total}: ${item.name || 'Sem nome'}...`;
-
-                    if (doc.length < 11) {
-                        processed++;
-                        setTimeout(() => processNext(processed), 50);
-                        return;
-                    }
-
-                    const apiUrl = doc.length === 14 
-                        ? `https://brasilapi.com.br/api/cnpj/v1/${doc}`
-                        : `https://brasilapi.com.br/api/cpf/v1/${doc}`;
-
-                    fetch(apiUrl)
-                        .then(response => {
-                            if (!response.ok) throw new Error('Não encontrado');
-                            return response.json();
-                        })
-                        .then(data => {
-                            if (data && (data.razao_social || data.nome)) {
-                                const newName = data.razao_social || data.nome;
-                                if (newName && newName !== item.name) {
-                                    item.name = newName;
-                                    updated++;
-                                }
-                            }
-                        })
-                        .catch(() => {
-                            if (doc.length === 14) {
-                                fetch(`https://receitaws.com.br/v1/cnpj/${doc}`)
-                                    .then(response => response.json())
-                                    .then(data => {
-                                        if (data && data.nome && data.status !== 'ERROR') {
-                                            if (data.nome !== item.name) {
-                                                item.name = data.nome;
-                                                updated++;
-                                            }
-                                        }
-                                    })
-                                    .catch(() => {});
-                            }
-                        })
-                        .finally(() => {
-                            processed++;
-                            if (processed % 5 === 0 || processed === total) {
-                                saveState();
-                                renderRenewalComparison();
-                            }
-                            setTimeout(() => processNext(processed), 100);
-                        });
-                }
+}
 
                 function finishBulkFetch(updated, type) {
                     state._rfFetching = false;
@@ -4498,12 +4420,11 @@ function applyRoleRestrictions() {
                     processRenewalComparison();
                 }
 
-                processNext(0);
-            }
-
+    
             // ============================================================
             //  ATUALIZAÇÃO EM MASSA OTIMIZADA
             // ============================================================
+        
             function runMassCNPJUpdate() {
                 if (state._massUpdateRunning) {
                     showToast('Atualização já está em andamento.', 'error');
