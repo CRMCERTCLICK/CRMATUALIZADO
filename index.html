@@ -7900,22 +7900,45 @@ async function fetchReceitaFederalBulk(data, type) {
                 reader.readAsArrayBuffer(file);
             }
 
-         function processRenewalComparison() {
+       function processRenewalComparison() {
     const prev = state.renewalComparison.prevData || [];
     const current = state.renewalComparison.currentData || [];
 
-    // Filtro rígido para ignorar linhas de rodapé, impostos ou datas
-    const termosInvalidos = ['totais', 'total', 'quantidade', 'valor total', 'inss', 'csll', 'ir', 'pis', 'cofins', 'resumo'];
-    
-    function ehLinhaInvalida(item) {
-        if (!item) return true;
-        let texto = String(item.name || item.nome || item.cliente || item.doc || "").toLowerCase().trim();
-        
-        if (!texto) return true;
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto) || /^\d{4}-\d{2}-\d{2}$/.test(texto)) return true;
-        return termosInvalidos.some(termo => texto.startsWith(termo) || texto === termo);
+    // Função para extrair o Nome de qualquer propriedade do objeto (incluindo raw)
+    function extrairNome(item) {
+        if (!item) return "";
+        let raw = item.raw || {};
+        let n = item.name || item.nome || item.cliente || item.nomeCliente || item.razaoSocial ||
+                raw.name || raw.nome || raw.cliente || raw.Cliente || raw.RazaoSocial || raw.NOME || "";
+        return String(n).trim();
     }
 
+    // Função para extrair o Documento de qualquer propriedade do objeto
+    function extrairDoc(item) {
+        if (!item) return "";
+        let raw = item.raw || {};
+        let d = item.doc || item.documento || item.cpfCnpj || item.cnpj || item.cpf ||
+                raw.doc || raw.documento || raw.cpfCnpj || raw.cnpj || raw.cpf || raw.CPF || raw.CNPJ || "";
+        return String(d).replace(/\D/g, '');
+    }
+
+    // Termos de impostos/rodapé reais que devem ser descartados
+    const termosInvalidos = ['totais', 'total', 'quantidade:', 'valor total:', 'inss:', 'csll:', 'ir:', 'pis:', 'cofins:', 'resumo'];
+
+    function ehLinhaInvalida(item) {
+        let nome = extrairNome(item).toLowerCase();
+        let doc = extrairDoc(item);
+
+        // Se não tem nem nome nem documento válido
+        if (!nome && !doc) return true;
+
+        // Se for explicitamente um rótulo de imposto/rodapé
+        if (termosInvalidos.some(termo => nome.startsWith(termo) || nome === termo)) return true;
+
+        return false;
+    }
+
+    // Filtra preservando os clientes reais
     const prevClean = prev.filter(item => !ehLinhaInvalida(item));
     const currentClean = current.filter(item => !ehLinhaInvalida(item));
 
@@ -7923,7 +7946,7 @@ async function fetchReceitaFederalBulk(data, type) {
     const progressBar = document.getElementById('renewal-progress-bar');
     if (indicator) {
         indicator.classList.remove('hidden');
-        if (progressBar) progressBar.style.width = '20%';
+        if (progressBar) progressBar.style.width = '30%';
     }
 
     if (prevClean.length === 0 && currentClean.length === 0) {
@@ -7932,22 +7955,13 @@ async function fetchReceitaFederalBulk(data, type) {
         return;
     }
 
-    function getDocLimpo(item) {
-        let d = item.doc || item.documento || item.cpfCnpj || item.cnpj || item.cpf || "";
-        return String(d).replace(/\D/g, '');
-    }
-
-    function getNomeNormalizado(item) {
-        let n = item.name || item.nome || item.cliente || item.razaoSocial || item.nomeCliente || "";
-        return String(n).toLowerCase().trim().replace(/\s+/g, ' ');
-    }
-
+    // Mapeamento do Ano Atual para cruzamento
     const currentByDoc = new Map();
     const currentByName = new Map();
 
     currentClean.forEach(item => {
-        let doc = getDocLimpo(item);
-        let nome = getNomeNormalizado(item);
+        let doc = extrairDoc(item);
+        let nome = extrairNome(item).toLowerCase();
 
         if (doc && (doc.length === 11 || doc.length === 14)) {
             currentByDoc.set(doc, item);
@@ -7958,40 +7972,43 @@ async function fetchReceitaFederalBulk(data, type) {
     });
 
     const comparisonResults = [];
-    const matchedCurrentIds = new Set();
+    const matchedCurrentItems = new Set();
 
+    // Cruzamento 1: Percorre a planilha do Ano Anterior
     prevClean.forEach((prevItem, index) => {
-        let prevDoc = getDocLimpo(prevItem);
-        let prevNome = getNomeNormalizado(prevItem);
-        
+        let prevDoc = extrairDoc(prevItem);
+        let prevNomeOriginal = extrairNome(prevItem);
+        let prevNomeNorm = prevNomeOriginal.toLowerCase();
+
         let matchedItem = null;
         let matchType = null;
 
         if (prevDoc && currentByDoc.has(prevDoc)) {
             matchedItem = currentByDoc.get(prevDoc);
             matchType = 'Documento';
-        } else if (prevNome && currentByName.has(prevNome)) {
-            matchedItem = currentByName.get(prevNome);
+        } else if (prevNomeNorm && currentByName.has(prevNomeNorm)) {
+            matchedItem = currentByName.get(prevNomeNorm);
             matchType = 'Nome';
         }
 
         if (matchedItem) {
-            matchedCurrentIds.add(matchedItem);
+            matchedCurrentItems.add(matchedItem);
+            let currentNomeOriginal = extrairNome(matchedItem);
             comparisonResults.push({
                 index: index + 1,
-                clientPrev: prevItem.name || prevItem.nome || prevItem.cliente || '-',
-                doc: prevDoc || getDocLimpo(matchedItem) || '-',
-                namePrev: prevItem.name || prevItem.nome || prevItem.cliente || '-',
-                nameCurrent: matchedItem.name || matchedItem.nome || matchedItem.cliente || '-',
+                clientPrev: prevNomeOriginal || '-',
+                doc: prevDoc || extrairDoc(matchedItem) || '-',
+                namePrev: prevNomeOriginal || '-',
+                nameCurrent: currentNomeOriginal || '-',
                 matchType: matchType,
                 status: 'RENOVOU'
             });
         } else {
             comparisonResults.push({
                 index: index + 1,
-                clientPrev: prevItem.name || prevItem.nome || prevItem.cliente || '-',
+                clientPrev: prevNomeOriginal || '-',
                 doc: prevDoc || '-',
-                namePrev: prevItem.name || prevItem.nome || prevItem.cliente || '-',
+                namePrev: prevNomeOriginal || '-',
                 nameCurrent: 'Não presente',
                 matchType: '-',
                 status: 'NÃO RENOVOU'
@@ -7999,14 +8016,16 @@ async function fetchReceitaFederalBulk(data, type) {
         }
     });
 
+    // Cruzamento 2: Adiciona os Novos Clientes do Ano Atual
     currentClean.forEach(currentItem => {
-        if (!matchedCurrentIds.has(currentItem)) {
+        if (!matchedCurrentItems.has(currentItem)) {
+            let currentNomeOriginal = extrairNome(currentItem);
             comparisonResults.push({
                 index: comparisonResults.length + 1,
                 clientPrev: 'Não presente',
-                doc: getDocLimpo(currentItem) || '-',
+                doc: extrairDoc(currentItem) || '-',
                 namePrev: 'Não presente',
-                nameCurrent: currentItem.name || currentItem.nome || currentItem.cliente || '-',
+                nameCurrent: currentNomeOriginal || '-',
                 matchType: '-',
                 status: 'NOVO'
             });
@@ -8016,7 +8035,7 @@ async function fetchReceitaFederalBulk(data, type) {
     state.renewalComparison.results = comparisonResults;
 
     if (indicator) indicator.classList.add('hidden');
-    
+
     if (typeof renderRenewalComparison === 'function') {
         renderRenewalComparison();
     }
