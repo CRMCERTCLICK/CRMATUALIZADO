@@ -4319,13 +4319,95 @@ function applyRoleRestrictions() {
                     showToast('Carregue a planilha do ano atual primeiro.', 'error');
                     return;
                 }
-                fetchReceitaFederalBulk(data, 'current');
+               async function fetchReceitaFederalBulk(data, type) {
+    if (state._rfFetching) {
+        showToast('Já existe uma busca em andamento.', 'error');
+        return;
+    }
+
+    state._rfFetching = true;
+    state._rfCancelled = false;
+
+    const progressEl = document.getElementById(`rf-${type}-progress`);
+    const btn = document.getElementById(`rf-${type}-btn`);
+
+    if (progressEl) progressEl.classList.remove('hidden');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = ' Buscando...';
+    }
+
+    let processed = 0;
+    let updated = 0;
+    const total = data.length;
+    const targetData = type === 'prev' ? state.renewalComparison.prevData : state.renewalComparison.currentData;
+
+    try {
+        // Inicia o Loop passando por cada linha da planilha
+        for (let i = 0; i < total; i++) {
+            if (state._rfCancelled) {
+                showToast('Busca cancelada.', 'info');
+                break;
             }
 
-            function fetchReceitaFederalBulk(data, type) {
-                if (state._rfFetching) {
-                    showToast('Já existe uma busca em andamento.', 'error');
-                    return;
+            let linha = targetData[i];
+            
+            // Pega a coluna do documento e limpa a pontuação
+            let docStr = linha.documento || linha.cpfCnpj || linha.cnpj || linha.cpf || linha.Documento || linha.CNPJ || linha.CPF || "";
+            let docLimpo = String(docStr).replace(/\D/g, '');
+
+            if (progressEl) {
+                progressEl.innerText = `Processando ${i + 1} de ${total} (Atualizados: ${updated})...`;
+            }
+
+            if (docLimpo.length === 14) {
+                // É CNPJ! Busca na BrasilAPI
+                const resultado = await buscarNomeCNPJ(docLimpo);
+                if (resultado && resultado !== "CNPJ não encontrado" && resultado !== "Erro na busca") {
+                    linha.nome = resultado; // Salva o nome (Ajuste para linha.Nome se a coluna for maiúscula)
+                    updated++;
+                }
+            } else if (docLimpo.length === 11) {
+                // É CPF! Busca na API Biometria
+                const resultado = await buscarNomeCPF(docLimpo);
+                if (resultado && resultado !== "Nome não retornado pela API" && resultado !== "Erro na busca") {
+                    linha.nome = resultado; // Salva o nome
+                    updated++;
+                }
+            }
+
+            processed++;
+            // Pausa pequena de 300ms para não sobrecarregar as APIs
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        showToast(`Busca concluída! ${updated} registros atualizados.`, 'success');
+        
+        // === ATUALIZAR A TELA ===
+        // Aqui chamamos a função que desenha a tabela novamente para mostrar os nomes.
+        if (typeof renderRenewalComparison === "function") {
+            renderRenewalComparison();
+        } else if (typeof updateTables === "function") {
+            updateTables();
+        }
+        
+        console.log("Planilha Final:", targetData);
+
+    } catch (error) {
+        console.error("Erro no processamento em lote:", error);
+        showToast('Erro durante a busca.', 'error');
+    } finally {
+        state._rfFetching = false;
+        
+        if (progressEl) {
+            progressEl.innerText = `Concluído: ${updated} atualizados.`;
+            setTimeout(() => progressEl.classList.add('hidden'), 4000);
+        }
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = ' Buscar Nomes na Receita Federal';
+        }
+    }
                 }
                 state._rfFetching = true;
                 state._rfCancelled = false;
@@ -9030,8 +9112,6 @@ if (moedaStatus) moedaStatus.innerText = "Concluído";
     }
 };
 
-// COLOQUE O CÓDIGO NOVO AQUI PARA BAIXO:
-
 // 1. Função para buscar CNPJ
 async function buscarNomeCNPJ(cnpj) {
     try {
@@ -9047,12 +9127,51 @@ async function buscarNomeCNPJ(cnpj) {
 
 // 2. Função para buscar CPF
 async function buscarNomeCPF(cpf) {
-    // ... restante do código da mensagem anterior ...
+    try {
+        const response = await fetch('/api/psbio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ CPF: cpf, PSBioLocal: false })
+        });
+        
+        const data = await response.json();
+        
+        // Retorna o nome se existir, ou uma mensagem padrão
+        return data.Nome || "Nome não retornado pela API"; 
+    } catch (error) {
+        return "Erro na busca";
+    }
 }
 
-// 3. Função principal
+// 3. A Função principal que processa a planilha inteira
 window.enriquecerPlanilha = async function(linhasDaPlanilha) {
-    // ... restante do código da mensagem anterior ...
+    alert("Iniciando busca na base... Isso pode levar alguns minutos dependendo do tamanho da planilha.");
+    
+    for (let i = 0; i < linhasDaPlanilha.length; i++) {
+        let linha = linhasDaPlanilha[i];
+        
+        // Remove pontos e traços para contar os números
+        let docLimpo = linha.documento.replace(/\D/g, ''); 
+        
+        if (docLimpo.length === 14) {
+            // É CNPJ!
+            console.log(`Buscando CNPJ: ${docLimpo}...`);
+            linha.nome = await buscarNomeCNPJ(docLimpo);
+            
+        } else if (docLimpo.length === 11) {
+            // É CPF!
+            console.log(`Buscando CPF: ${docLimpo}...`);
+            linha.nome = await buscarNomeCPF(docLimpo);
+            
+        } else {
+            linha.nome = "Documento Inválido";
+        }
+    }
+    
+    alert("Busca finalizada com sucesso!");
+    console.log("Planilha Enriquecida:", linhasDaPlanilha);
+    
+    // Em breve colocaremos aqui a parte de atualizar a tela
 };
             window.renderGlobalNotes = renderGlobalNotes;
             window.addGlobalNote = addGlobalNote;
