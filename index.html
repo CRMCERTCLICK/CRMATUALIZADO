@@ -7941,111 +7941,141 @@ function processRenewalComparison() {
 
 function renderRenewalComparison() {
     try {
-        const results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-        const prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
-        const currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
+        var results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
+        var prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
+        var currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
 
         // 1. Atualiza os Contadores
-        let renovaram = results.filter(r => r.status === 'RENOVOU').length;
-        let naoRenovaram = results.filter(r => r.status === 'NÃO RENOVOU').length;
-        let novos = results.filter(r => r.status === 'NOVO').length;
-        let totalPrev = prevData.length;
-        let totalCurrent = currentData.length;
-        let taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
-
-        const valores = [totalPrev, totalCurrent, renovaram, naoRenovaram, taxa + '%', novos];
+        var renovaram = 0;
+        var naoRenovaram = 0;
+        var novos = 0;
+        var r = 0;
         
-        let numerosNaTela = document.querySelectorAll('.grid .text-3xl, .grid .text-4xl, .grid h3, .grid .text-2xl, .grid .text-brand-400');
-        let indicesValidos = [];
+        for (r = 0; r < results.length; r++) {
+            if (results[r].status === 'RENOVOU') renovaram++;
+            else if (results[r].status === 'NÃO RENOVOU') naoRenovaram++;
+            else novos++;
+        }
         
-        numerosNaTela.forEach(el => {
-            let txt = el.innerText.trim();
-            if(txt === '0' || txt === '0%') indicesValidos.push(el);
-        });
+        var totalPrev = prevData.length;
+        var totalCurrent = currentData.length;
+        var taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
+        var valores = [totalPrev, totalCurrent, renovaram, naoRenovaram, taxa + '%', novos];
+        var numerosNaTela = document.querySelectorAll('.grid .text-3xl, .grid .text-4xl, .grid h3, .grid .text-2xl, .grid .text-brand-400');
+        var indicesValidos = [];
+        var b = 0;
+        
+        for (b = 0; b < numerosNaTela.length; b++) {
+            var txt = numerosNaTela[b].innerText.trim();
+            if(txt === '0' || txt === '0%') {
+                indicesValidos.push(numerosNaTela[b]);
+            }
+        }
 
         if(indicesValidos.length < 6 && numerosNaTela.length >= 6) {
             indicesValidos = Array.from(numerosNaTela).slice(0, 6);
         }
 
         if(indicesValidos.length >= 6) {
-            indicesValidos.forEach((el, i) => el.innerText = valores[i]);
+            var v = 0;
+            for (v = 0; v < 6; v++) {
+                indicesValidos[v].innerText = valores[v];
+            }
         }
 
         // 2. Transforma o aviso na Tabela
         if (results.length > 0) {
-            let tableContainer = document.getElementById('renewal-table-wrapper');
+            var tableContainer = document.getElementById('renewal-table-wrapper');
             
             if (!tableContainer) {
-                const todosDivs = document.querySelectorAll('div');
-                let areaAviso = null;
-                for(let i = 0; i < todosDivs.length; i++) {
-                    if(todosDivs[i].innerText && todosDivs[i].innerText.includes('Carregue as duas planilhas') && todosDivs[i].children.length < 5) {
-                        areaAviso = todosDivs[i];
+                var elementosTexto = document.querySelectorAll('p, div, span');
+                var areaAviso = null;
+                var t = 0;
+                
+                for (t = 0; t < elementosTexto.length; t++) {
+                    var texto = elementosTexto[t].innerText || '';
+                    if(texto.indexOf('Carregue as duas planilhas') !== -1 && texto.length < 100) {
+                        areaAviso = elementosTexto[t];
                         break;
                     }
                 }
 
-                if (areaAviso && areaAviso.parentNode) {
-                    tableContainer = document.createElement('div');
-                    tableContainer.id = 'renewal-table-wrapper';
-                    tableContainer.className = 'overflow-x-auto w-full mt-4';
-                    areaAviso.parentNode.replaceChild(tableContainer, areaAviso);
+                if (areaAviso) {
+                    areaAviso.style.display = 'none';
+                    var cardPai = areaAviso.closest('.glass-card');
+                    if (!cardPai && areaAviso.parentElement) {
+                        cardPai = areaAviso.parentElement;
+                    }
+                    if (cardPai) {
+                        tableContainer = document.createElement('div');
+                        tableContainer.id = 'renewal-table-wrapper';
+                        tableContainer.className = 'overflow-x-auto w-full mt-4 pb-4';
+                        cardPai.appendChild(tableContainer);
+                    }
                 }
             }
 
             if (tableContainer) {
-                let html = [];
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
-                html.push('');
+                var html = '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '' +
+                           '';
 
-                for (let i = 0; i < results.length; i++) {
-                    let row = results[i];
-                    let statusBadge = '';
+                // --- O SEGREDO ESTÁ AQUI ---
+                // Declaramos as variáveis fora de qualquer estrutura de repetição
+                var numeroDaLinha = 1;
+                var linhaAtual = null;
+                var statusBadge = '';
+                var matchBadge = '';
+                var z = 0;
+
+                for (z = 0; z < results.length; z++) {
+                    linhaAtual = results[z];
+                    statusBadge = '';
                     
-                    if (row.status === 'RENOVOU') {
+                    if (linhaAtual.status === 'RENOVOU') {
                         statusBadge = '🔄 RENOVOU';
-                    } else if (row.status === 'NÃO RENOVOU') {
+                    } else if (linhaAtual.status === 'NÃO RENOVOU') {
                         statusBadge = '❌ NÃO RENOVOU';
                     } else {
                         statusBadge = '⭐ NOVO';
                     }
 
-                    let matchBadge = '-';
-                    if (row.matchType && row.matchType !== '-') {
-                        matchBadge = '📇 ' + row.matchType + '';
+                    matchBadge = '-';
+                    if (linhaAtual.matchType && linhaAtual.matchType !== '-') {
+                        matchBadge = '📇 ' + linhaAtual.matchType + '';
                     }
 
-                    html.push('');
-                    html.push('');
-                    html.push('');
-                    html.push('');
-                    html.push('');
-                    html.push('');
-                    html.push('');
-                    html.push('');
-                    html.push('');
+                    html += '' +
+                            '' +
+                            '' +
+                            '' +
+                            '' +
+                            '' +
+                            '' +
+                            '' +
+                            '';
+                    
+                    numeroDaLinha++; // Soma de forma global sem depender de loops do navegador
                 }
 
-                html.push('#CLIENTEDOCUMENTONOME ANO ANTERIORNOME ANO ATUALMATCHSTATUS' + (i + 1) + '' + (row.clientPrev || '-') + '' + (row.doc || '-') + '' + (row.namePrev || '-') + '' + (row.nameCurrent || '-') + '' + matchBadge + '' + statusBadge + '');
-                tableContainer.innerHTML = html.join('');
+                html += '#CLIENTEDOCUMENTONOME ANO ANTERIORNOME ANO ATUALMATCHSTATUS' + numeroDaLinha + '' + (linhaAtual.clientPrev || '-') + '' + (linhaAtual.doc || '-') + '' + (linhaAtual.namePrev || '-') + '' + (linhaAtual.nameCurrent || '-') + '' + matchBadge + '' + statusBadge + '';
+                tableContainer.innerHTML = html;
             }
         }
     } catch (erro) {
         console.error("Erro ao desenhar a interface. Detalhes:", erro);
     }
 }
-
 
             function renderEmptyComparison() {
                 document.getElementById('renewal-comparison-container').innerHTML = `
