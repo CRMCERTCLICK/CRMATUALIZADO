@@ -7938,80 +7938,114 @@ function processRenewalComparison() {
 }
 
 // Função de renderização completa e segura
+
 function renderRenewalComparison() {
-    const results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-    const prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
-    const currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
+    try {
+        const results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
+        const prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
+        const currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
 
-    // 1. Atualiza os Contadores dos Cards Superiores
-    let renovaram = 0;
-    let naoRenovaram = 0;
-    let novos = 0;
+        // 1. Atualiza os Contadores
+        let renovaram = results.filter(r => r.status === 'RENOVOU').length;
+        let naoRenovaram = results.filter(r => r.status === 'NÃO RENOVOU').length;
+        let novos = results.filter(r => r.status === 'NOVO').length;
+        let totalPrev = prevData.length;
+        let totalCurrent = currentData.length;
+        let taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
 
-    results.forEach(r => {
-        if (r.status === 'RENOVOU') renovaram++;
-        else if (r.status === 'NÃO RENOVOU') naoRenovaram++;
-        else if (r.status === 'NOVO') novos++;
-    });
-
-    const totalPrev = prevData.length;
-    const totalCurrent = currentData.length;
-    const taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
-
-    const cardsValues = [totalPrev, totalCurrent, renovaram, naoRenovaram, `${taxa}%`, novos];
-    const cardElements = document.querySelectorAll('.grid .text-2xl, .grid .text-3xl, .grid h3');
-    
-    if (cardElements.length >= 6) {
-        cardsValues.forEach((val, idx) => {
-            if (cardElements[idx]) cardElements[idx].innerText = val;
+        const valores = [totalPrev, totalCurrent, renovaram, naoRenovaram, taxa + '%', novos];
+        
+        let numerosNaTela = document.querySelectorAll('.grid .text-3xl, .grid .text-4xl, .grid h3, .grid .text-2xl, .grid .text-brand-400');
+        let indicesValidos = [];
+        
+        numerosNaTela.forEach(el => {
+            let txt = el.innerText.trim();
+            if(txt === '0' || txt === '0%') indicesValidos.push(el);
         });
-    }
 
-    // 2. Preenche a Tabela e Esconde a caixa de estado vazio
-    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
-    const emptyState = document.getElementById('renewal-empty-state');
-
-    if (!container) return;
-
-    if (results.length === 0) {
-        if (emptyState) emptyState.style.display = 'flex';
-        container.innerHTML = '';
-        return;
-    }
-
-    if (emptyState) {
-        emptyState.style.display = 'none';
-        emptyState.classList.add('hidden');
-    }
-
-    let html = '';
-    results.forEach((row, index) => {
-        let statusBadge = '';
-        if (row.status === 'RENOVOU') {
-            statusBadge = '<span class="px-2 py-1 text-xs rounded bg-emerald-900/50 text-emerald-400 border border-emerald-500/30">🔄 RENOVOU</span>';
-        } else if (row.status === 'NÃO RENOVOU') {
-            statusBadge = '<span class="px-2 py-1 text-xs rounded bg-rose-900/50 text-rose-400 border border-rose-500/30">❌ NÃO RENOVOU</span>';
-        } else {
-            statusBadge = '<span class="px-2 py-1 text-xs rounded bg-amber-900/50 text-amber-400 border border-amber-500/30">⭐ NOVO</span>';
+        if(indicesValidos.length < 6 && numerosNaTela.length >= 6) {
+            indicesValidos = Array.from(numerosNaTela).slice(0, 6);
         }
 
-        let matchBadge = (row.matchType && row.matchType !== '-')
-            ? '<span class="text-xs text-slate-400">📇 ' + row.matchType + '</span>' 
-            : '<span class="text-slate-600">-</span>';
+        if(indicesValidos.length >= 6) {
+            indicesValidos.forEach((el, i) => el.innerText = valores[i]);
+        }
 
-        html += '<tr class="border-b border-slate-800 hover:bg-slate-800/40 transition">';
-        html += '<td class="p-3 text-slate-400 font-mono text-sm">' + (index + 1) + '</td>';
-        html += '<td class="p-3 text-slate-200 text-sm font-medium">' + (row.clientPrev || '-') + '</td>';
-        html += '<td class="p-3 text-slate-400 font-mono text-sm">' + (row.doc || '-') + '</td>';
-        html += '<td class="p-3 text-slate-200 text-sm">' + (row.namePrev || '-') + '</td>';
-        html += '<td class="p-3 text-slate-200 text-sm">' + (row.nameCurrent || '-') + '</td>';
-        html += '<td class="p-3 text-sm">' + matchBadge + '</td>';
-        html += '<td class="p-3 text-sm">' + statusBadge + '</td>';
-        html += '</tr>';
-    });
+        // 2. Transforma o aviso na Tabela
+        if (results.length > 0) {
+            let tableContainer = document.getElementById('renewal-table-wrapper');
+            
+            if (!tableContainer) {
+                const todosDivs = document.querySelectorAll('div');
+                let areaAviso = null;
+                for(let i = 0; i < todosDivs.length; i++) {
+                    if(todosDivs[i].innerText && todosDivs[i].innerText.includes('Carregue as duas planilhas') && todosDivs[i].children.length < 5) {
+                        areaAviso = todosDivs[i];
+                        break;
+                    }
+                }
 
-    container.innerHTML = html;
+                if (areaAviso && areaAviso.parentNode) {
+                    tableContainer = document.createElement('div');
+                    tableContainer.id = 'renewal-table-wrapper';
+                    tableContainer.className = 'overflow-x-auto w-full mt-4';
+                    areaAviso.parentNode.replaceChild(tableContainer, areaAviso);
+                }
+            }
+
+            if (tableContainer) {
+                let html = [];
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+                html.push('');
+
+                for (let i = 0; i < results.length; i++) {
+                    let row = results[i];
+                    let statusBadge = '';
+                    
+                    if (row.status === 'RENOVOU') {
+                        statusBadge = '🔄 RENOVOU';
+                    } else if (row.status === 'NÃO RENOVOU') {
+                        statusBadge = '❌ NÃO RENOVOU';
+                    } else {
+                        statusBadge = '⭐ NOVO';
+                    }
+
+                    let matchBadge = '-';
+                    if (row.matchType && row.matchType !== '-') {
+                        matchBadge = '📇 ' + row.matchType + '';
+                    }
+
+                    html.push('');
+                    html.push('');
+                    html.push('');
+                    html.push('');
+                    html.push('');
+                    html.push('');
+                    html.push('');
+                    html.push('');
+                    html.push('');
+                }
+
+                html.push('#CLIENTEDOCUMENTONOME ANO ANTERIORNOME ANO ATUALMATCHSTATUS' + (i + 1) + '' + (row.clientPrev || '-') + '' + (row.doc || '-') + '' + (row.namePrev || '-') + '' + (row.nameCurrent || '-') + '' + matchBadge + '' + statusBadge + '');
+                tableContainer.innerHTML = html.join('');
+            }
+        }
+    } catch (erro) {
+        console.error("Erro ao desenhar a interface. Detalhes:", erro);
+    }
 }
+
 
             function renderEmptyComparison() {
                 document.getElementById('renewal-comparison-container').innerHTML = `
@@ -8030,45 +8064,6 @@ function renderRenewalComparison() {
                 document.getElementById('renewal-stat-rate').textContent = '0%';
             }
 
-   function renderRenewalComparison() {
-    const results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-    const container = document.getElementById('renewal-comparison-table-body') || document.querySelector('tbody');
-
-    if (!container) return;
-
-    if (results.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-
-    let html = '';
-    results.forEach((row, index) => {
-        let statusBadge = '';
-        if (row.status === 'RENOVOU') {
-            statusBadge = '🔄 RENOVOU';
-        } else if (row.status === 'NÃO RENOVOU') {
-            statusBadge = '❌ NÃO RENOVOU';
-        } else {
-            statusBadge = '⭐ NOVO';
-        }
-
-        let matchBadge = (row.matchType && row.matchType !== '-')
-            ? '📇 ' + row.matchType + '' 
-            : '-';
-
-        html += '';
-        html += '' + (index + 1) + '';
-        html += '' + (row.clientPrev || '-') + '';
-        html += '' + (row.doc || '-') + '';
-        html += '' + (row.namePrev || '-') + '';
-        html += '' + (row.nameCurrent || '-') + '';
-        html += '' + matchBadge + '';
-        html += '' + statusBadge + '';
-        html += '';
-    });
-
-    container.innerHTML = html;
-}
 
             function exportRenewalComparison() {
                 const matched = state.renewalComparison.matched;
