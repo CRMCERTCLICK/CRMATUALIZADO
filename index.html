@@ -7900,21 +7900,22 @@ async function fetchReceitaFederalBulk(data, type) {
                 reader.readAsArrayBuffer(file);
             }
 
-       function processRenewalComparison() {
+     function processRenewalComparison() {
     const prev = state.renewalComparison.prevData || [];
     const current = state.renewalComparison.currentData || [];
 
-    // Função para extrair o Nome de qualquer propriedade do objeto (incluindo raw)
-    function extrairNome(item) {
+    // Helper para extrair qualquer texto disponível no objeto
+    function getTexto(item) {
         if (!item) return "";
         let raw = item.raw || {};
-        let n = item.name || item.nome || item.cliente || item.nomeCliente || item.razaoSocial ||
-                raw.name || raw.nome || raw.cliente || raw.Cliente || raw.RazaoSocial || raw.NOME || "";
-        return String(n).trim();
+        return String(
+            item.name || item.nome || item.cliente || item.nomeCliente || item.razaoSocial || item.doc ||
+            raw.name || raw.nome || raw.cliente || raw.Cliente || raw.RazaoSocial || raw.NOME || ""
+        ).trim();
     }
 
-    // Função para extrair o Documento de qualquer propriedade do objeto
-    function extrairDoc(item) {
+    // Helper para extrair apenas números de documento
+    function getDoc(item) {
         if (!item) return "";
         let raw = item.raw || {};
         let d = item.doc || item.documento || item.cpfCnpj || item.cnpj || item.cpf ||
@@ -7922,63 +7923,39 @@ async function fetchReceitaFederalBulk(data, type) {
         return String(d).replace(/\D/g, '');
     }
 
-    // Termos de impostos/rodapé reais que devem ser descartados
-    const termosInvalidos = ['totais', 'total', 'quantidade:', 'valor total:', 'inss:', 'csll:', 'ir:', 'pis:', 'cofins:', 'resumo'];
+    // Filtra APENAS linhas que contêm rótulos exatos do rodapé/impostos
+    const termosProibidos = ['totais', 'quantidade:', 'valor total:', 'inss:', 'csll:', 'ir:', 'pis:', 'cofins:'];
 
-    function ehLinhaInvalida(item) {
-        let nome = extrairNome(item).toLowerCase();
-        let doc = extrairDoc(item);
-
-        // Se não tem nem nome nem documento válido
-        if (!nome && !doc) return true;
-
-        // Se for explicitamente um rótulo de imposto/rodapé
-        if (termosInvalidos.some(termo => nome.startsWith(termo) || nome === termo)) return true;
-
-        return false;
+    function ehRodape(item) {
+        let txt = getTexto(item).toLowerCase();
+        return termosProibidos.some(termo => txt.startsWith(termo) || txt === termo);
     }
 
-    // Filtra preservando os clientes reais
-    const prevClean = prev.filter(item => !ehLinhaInvalida(item));
-    const currentClean = current.filter(item => !ehLinhaInvalida(item));
+    const prevClean = prev.filter(item => !ehRodape(item));
+    const currentClean = current.filter(item => !ehRodape(item));
 
     const indicator = document.getElementById('renewal-processing-indicator');
-    const progressBar = document.getElementById('renewal-progress-bar');
-    if (indicator) {
-        indicator.classList.remove('hidden');
-        if (progressBar) progressBar.style.width = '30%';
-    }
+    if (indicator) indicator.classList.add('hidden');
 
-    if (prevClean.length === 0 && currentClean.length === 0) {
-        if (indicator) indicator.classList.add('hidden');
-        renderEmptyComparison();
-        return;
-    }
-
-    // Mapeamento do Ano Atual para cruzamento
     const currentByDoc = new Map();
     const currentByName = new Map();
 
     currentClean.forEach(item => {
-        let doc = extrairDoc(item);
-        let nome = extrairNome(item).toLowerCase();
+        let d = getDoc(item);
+        let n = getTexto(item).toLowerCase();
 
-        if (doc && (doc.length === 11 || doc.length === 14)) {
-            currentByDoc.set(doc, item);
-        }
-        if (nome && nome.length > 2) {
-            currentByName.set(nome, item);
-        }
+        if (d && (d.length === 11 || d.length === 14)) currentByDoc.set(d, item);
+        if (n && n.length > 1) currentByName.set(n, item);
     });
 
     const comparisonResults = [];
     const matchedCurrentItems = new Set();
 
-    // Cruzamento 1: Percorre a planilha do Ano Anterior
+    // Cruzamento do Ano Anterior
     prevClean.forEach((prevItem, index) => {
-        let prevDoc = extrairDoc(prevItem);
-        let prevNomeOriginal = extrairNome(prevItem);
-        let prevNomeNorm = prevNomeOriginal.toLowerCase();
+        let prevDoc = getDoc(prevItem);
+        let prevNome = getTexto(prevItem);
+        let prevNomeNorm = prevNome.toLowerCase();
 
         let matchedItem = null;
         let matchType = null;
@@ -7993,22 +7970,21 @@ async function fetchReceitaFederalBulk(data, type) {
 
         if (matchedItem) {
             matchedCurrentItems.add(matchedItem);
-            let currentNomeOriginal = extrairNome(matchedItem);
             comparisonResults.push({
                 index: index + 1,
-                clientPrev: prevNomeOriginal || '-',
-                doc: prevDoc || extrairDoc(matchedItem) || '-',
-                namePrev: prevNomeOriginal || '-',
-                nameCurrent: currentNomeOriginal || '-',
+                clientPrev: prevNome || '-',
+                doc: prevDoc || getDoc(matchedItem) || '-',
+                namePrev: prevNome || '-',
+                nameCurrent: getTexto(matchedItem) || '-',
                 matchType: matchType,
                 status: 'RENOVOU'
             });
         } else {
             comparisonResults.push({
                 index: index + 1,
-                clientPrev: prevNomeOriginal || '-',
+                clientPrev: prevNome || '-',
                 doc: prevDoc || '-',
-                namePrev: prevNomeOriginal || '-',
+                namePrev: prevNome || '-',
                 nameCurrent: 'Não presente',
                 matchType: '-',
                 status: 'NÃO RENOVOU'
@@ -8016,25 +7992,24 @@ async function fetchReceitaFederalBulk(data, type) {
         }
     });
 
-    // Cruzamento 2: Adiciona os Novos Clientes do Ano Atual
+    // Novos clientes do Ano Atual
     currentClean.forEach(currentItem => {
         if (!matchedCurrentItems.has(currentItem)) {
-            let currentNomeOriginal = extrairNome(currentItem);
+            let currentNome = getTexto(currentItem);
             comparisonResults.push({
                 index: comparisonResults.length + 1,
                 clientPrev: 'Não presente',
-                doc: extrairDoc(currentItem) || '-',
+                doc: getDoc(currentItem) || '-',
                 namePrev: 'Não presente',
-                nameCurrent: currentNomeOriginal || '-',
+                nameCurrent: currentNome || '-',
                 matchType: '-',
                 status: 'NOVO'
             });
         }
     });
 
+    // Salva o resultado e atualiza a tela
     state.renewalComparison.results = comparisonResults;
-
-    if (indicator) indicator.classList.add('hidden');
 
     if (typeof renderRenewalComparison === 'function') {
         renderRenewalComparison();
