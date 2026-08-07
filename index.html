@@ -7838,62 +7838,6 @@ function sanitizeDoc(doc) {
 }
 
 
-// 3. Renderização Correta do HTML (Corrige o "Blocão de Texto")
-function renderizarTabelaComparativo(resultados) {
-    const tbody = document.getElementById('renewal-table-body');
-    const placeholder = document.getElementById('renewal-placeholder');
-    const wrapper = document.getElementById('renewal-table-wrapper');
-
-    if (!tbody) return;
-
-    if (placeholder) placeholder.classList.add('hidden');
-    if (wrapper) wrapper.classList.remove('hidden');
-
-    // Aqui usamos innerHTML para gerar as colunas corretamente!
-    let html = '';
-    resultados.forEach((r) => {
-        let badgeClass = '';
-        let badgeText = '';
-        let matchIcon = '';
-        
-        // Cores baseadas no status
-        if (r.status === 'renovado') {
-            badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-            badgeText = '🔄 RENOVOU';
-            matchIcon = r.matchBy === 'DOC' 
-                ? '<span class="text-[10px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-bold border border-slate-700">DOC</span>' 
-                : '<span class="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded font-bold border border-slate-700">NOME</span>';
-        } else if (r.status === 'nao-renovado') {
-            badgeClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
-            badgeText = '❌ NÃO RENOVOU';
-            matchIcon = '<span class="text-slate-600">-</span>';
-        } else {
-            badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
-            badgeText = '⭐ NOVO';
-            matchIcon = '<span class="text-slate-600">-</span>';
-        }
-
-        // Estrutura HTML correta (<tr> e <td>)
-        html += `
-            <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
-                <td class="p-3 text-slate-500 font-mono text-[10px]">${r.id}</td>
-                <td class="p-3 font-bold text-slate-200 text-xs truncate max-w-[220px]" title="${r.cliente}">${r.cliente}</td>
-                <td class="p-3 text-slate-400 font-mono text-[10px]">${r.documento}</td>
-                <td class="p-3 text-slate-500 text-[10px] truncate max-w-[150px]" title="${r.nomePrev}">${r.nomePrev}</td>
-                <td class="p-3 text-slate-400 text-[10px] truncate max-w-[150px]" title="${r.nomeCurr}">${r.nomeCurr}</td>
-                <td class="p-3 text-center">${matchIcon}</td>
-                <td class="p-3 text-right">
-                    <span class="px-2.5 py-1 rounded-md text-[9px] font-bold border ${badgeClass}">
-                        ${badgeText}
-                    </span>
-                </td>
-            </tr>
-        `;
-    });
-
-    tbody.innerHTML = html; // Injeta os elementos HTML de verdade na tabela
-}
-
             function exportRenewalReportExcel() {
                 const data = state.renewalComparison.reportData;
                 if (!data) {
