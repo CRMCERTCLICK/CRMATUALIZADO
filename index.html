@@ -2760,11 +2760,11 @@ window.loadState = async function loadState() {
         }
 
         // Alimenta o 'state' local com os dados da nuvem. Se estiver vazio, usa os dados padrão para não quebrar a tela.
-        state.users = dbUsers && dbUsers.length > 0 ? dbUsers : defaultUsers;
-        state.clients = dbClients && dbClients.length > 0 ? dbClients : defaultClients;
-        state.accountants = dbAccountants && dbAccountants.length > 0 ? dbAccountants : defaultAccountants;
-        state.logs = dbLogs || [];
-        state.campaigns = dbCampaigns && dbCampaigns.length > 0 ? dbCampaigns : defaultCampaigns;
+       state.users = dbUsers && dbUsers.length > 0 ? dbUsers : defaultUsers;
+       state.clients = dbClients || [];
+       state.accountants = dbAccountants || [];
+       state.logs = dbLogs || [];
+       state.campaigns = dbCampaigns || [];
 
         // Mantém configurações menores no LocalStorage (como Tema e Interface)
         const getLocal = (key, fallback) => { 
