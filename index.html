@@ -3098,14 +3098,12 @@ function subscribeSupabaseRealtime() {
         if (!channel) return;
 
         window.realtimeChannel = channel
-            // 1. Escuta CLIENTS
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'clients' }, (payload) => {
                 if (state.clients && payload.old) {
                     state.clients = state.clients.filter(c => c.id !== payload.old.id);
                     if (typeof refreshAllUI === 'function') refreshAllUI();
                 }
             })
-            // 2. Escuta ACCOUNTANTS (Parceiros)
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'accountants' }, (payload) => {
                 if (state.accountants && payload.old) {
                     state.accountants = state.accountants.filter(a => a.id !== payload.old.id);
@@ -3113,7 +3111,6 @@ function subscribeSupabaseRealtime() {
                     if (typeof refreshAllUI === 'function') refreshAllUI();
                 }
             })
-            // 3. Escuta USERS (Deleção)
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'users' }, (payload) => {
                 if (state.users && payload.old) {
                     state.users = state.users.filter(u => u.id !== payload.old.id);
@@ -3121,7 +3118,6 @@ function subscribeSupabaseRealtime() {
                     if (typeof showToast === 'function') showToast("Um usuário foi removido pelo administrador.", "info");
                 }
             })
-            // 4. Escuta USERS (Atualização)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
                 if (state.users && payload.new) {
                     const index = state.users.findIndex(u => u.id === payload.new.id);
@@ -3134,12 +3130,11 @@ function subscribeSupabaseRealtime() {
                     }
                 }
             })
-            // 5. Escuta CHAT_MESSAGES (Novas Mensagens para Qualquer Usuário)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-                console.log("⚡ CHEGOU NO REALTIME:", payload.new); // <--- Adicione esta linha AQUI
+                console.log("⚡ CHEGOU NO REALTIME:", payload.new);
                 const newMsg = payload.new;
                 if (!state.currentUser || !newMsg) return;
-                
+
                 const myId = String(state.currentUser.id);
                 const senderId = String(newMsg.sender_id);
                 const receiverId = String(newMsg.receiver_id);
@@ -3159,21 +3154,19 @@ function subscribeSupabaseRealtime() {
                             timestamp: newMsg.created_at,
                             read: receiverId === myId ? false : true
                         });
-
-                        if (receiverId === myId && state.chat.activeConversation !== convKey) {
-                            state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
-                            
-                            document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
-                                el.classList.add('chat-notify-ping');
-                            });
-
-                            if (typeof showToast === 'function') showToast("Nova mensagem no chat!", "info");
-                        }
-
-                        if (typeof renderChatMessages === 'function') renderChatMessages();
-                        if (typeof renderChatContacts === 'function') renderChatContacts();
-                        if (typeof renderChatContactsSidebar === 'function') renderChatContactsSidebar();
                     }
+
+                    if (receiverId === myId && state.chat.activeConversation !== convKey) {
+                        state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
+                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
+                            el.classList.add('chat-notify-ping');
+                        });
+                        if (typeof showToast === 'function') showToast("Nova mensagem no chat!", "info");
+                    }
+
+                    if (typeof renderChatMessages === 'function') renderChatMessages();
+                    if (typeof renderChatContacts === 'function') renderChatContacts();
+                    if (typeof renderChatContactsSidebar === 'function') renderChatContactsSidebar();
                 }
             });
 
@@ -9033,6 +9026,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (loginContainer) loginContainer.classList.add('hidden');
         if (mainAppContainer) mainAppContainer.classList.remove('hidden');
         if (typeof switchTab === 'function') switchTab('dashboard');
+        if (typeof subscribeSupabaseRealtime === 'function') subscribeSupabaseRealtime();
+        if (typeof loadChatMessages === 'function') loadChatMessages();
     } else {
         // Se não tem login, esconde carregamento e mostra tela de login
         const splash = document.getElementById('splash-screen');
