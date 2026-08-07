@@ -3136,7 +3136,7 @@ function subscribeSupabaseRealtime() {
                 if (!state.currentUser || !newMsg) return;
 
                 // Função interna para remover qualquer 'u-' ou espaço do ID antes de comparar
-                const sanitize = id => String(id || '').replace(/^u-/, '').trim();
+                const sanitize = id => String(id || '').replace(/^u-/, '').replace(/^usr-?/, '').trim();
 
                 const myId = sanitize(state.currentUser.id);
                 const senderId = sanitize(newMsg.sender_id);
@@ -6734,7 +6734,7 @@ async function fetchReceitaFederalBulk(data, type) {
 
             function getChatMessages(conversationId) { return state.chat.messages[conversationId] || []; }
 
-         window.sendChatMessage = async function() {
+     window.sendChatMessage = async function() {
     const input = document.getElementById('chat-message-input');
     if (!input) return;
     const text = input.value.trim();
@@ -6746,9 +6746,25 @@ async function fetchReceitaFederalBulk(data, type) {
         return;
     }
 
-    const parts = activeConv.split('_');
-    const myId = String(state.currentUser.id);
-    const otherId = String(parts[0] === myId ? parts[1] : parts[0]);
+    // Função interna de higienização de ID
+    const sanitize = id => String(id || '').replace(/^u-/, '').replace(/^usr-?/, '').trim();
+
+    const myId = sanitize(state.currentUser.id);
+    const parts = activeConv.split('_').map(sanitize);
+
+    // Descobre o ID do destinatário filtrando o próprio ID do usuário
+    let otherId = parts.find(p => p && p !== myId && p !== 'usr');
+
+    // Se a chave não tinha o outro ID, tenta pegar diretamente do contato selecionado
+    if (!otherId && state.chat.selectedContact) {
+        otherId = sanitize(state.chat.selectedContact.id);
+    }
+
+    if (!otherId || otherId === 'usr') {
+        console.error("ID de destino inválido:", activeConv);
+        if (typeof showToast === 'function') showToast('Erro ao identificar destinatário. Selecione o contato novamente.', 'error');
+        return;
+    }
 
     const msgPayload = {
         id: 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -6767,18 +6783,19 @@ async function fetchReceitaFederalBulk(data, type) {
         try {
             const { error } = await db.from('chat_messages').insert([msgPayload]);
             if (error) {
-                console.error("Erro RLS no Supabase Chat:", error);
-                if (typeof showToast === 'function') showToast("Erro de permissão ao enviar: " + error.message, "error");
+                console.error("Erro Supabase Chat:", error);
+                if (typeof showToast === 'function') showToast("Erro ao enviar mensagem: " + error.message, "error");
                 return;
             }
         } catch (e) {
-            console.error("Erro de conexão no chat:", e);
+            console.error("Exceção ao enviar chat:", e);
         }
     }
 
-    // Atualiza a tela do remetente localmente
-    if (!state.chat.messages[activeConv]) state.chat.messages[activeConv] = [];
-    state.chat.messages[activeConv].push({
+    // Atualiza localmente no remetente
+    const convKey = [myId, otherId].sort().join('_');
+    if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
+    state.chat.messages[convKey].push({
         id: msgPayload.id,
         from: myId,
         to: otherId,
