@@ -3024,11 +3024,17 @@ window.loadState = async function loadState() {
                 showToast("Sessão finalizada.");
             }
 
+// Crie esta variável logo ANTES da função
+let realtimeChannel = null;
+
 function subscribeSupabaseRealtime() {
     const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
     if (!db || typeof db.channel !== 'function') return;
 
-    db.channel('clients-realtime-sync')
+    // Se já estiver conectado, cancela a execução para evitar o erro do console
+    if (realtimeChannel) return;
+
+    realtimeChannel = db.channel('clients-realtime-sync')
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'clients' },
@@ -6369,7 +6375,7 @@ async function fetchReceitaFederalBulk(data, type) {
                 showToast('Mapeamento redefinido.');
             }
 
-            function executeSmartImport() {
+            async function executeSmartImport() {
                 const previewRows = state.importData.preview;
                 const selectedRows = previewRows.filter(row => row.isSelected !== false && row.status === 'valid');
 
@@ -6440,7 +6446,33 @@ async function fetchReceitaFederalBulk(data, type) {
                     return new Date(a.expirationDate) - new Date(b.expirationDate);
                 });
 
-                state.clients.push(...newLeads);
+               newLeads.sort((a, b) => {
+        if (!a.expirationDate && !!b.expirationDate) return 0;
+        if (!a.expirationDate) return 1;
+        if (!b.expirationDate) return -1;
+        return new Date(a.expirationDate) - new Date(b.expirationDate);
+    });
+
+    // --- INÍCIO DO CÓDIGO QUE VOCÊ VAI COLAR ---
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+
+    if (db && typeof db.from === 'function') {
+        try {
+            const { error } = await db.from('clients').insert(newLeads);
+
+            if (error) {
+                console.error("Erro na importação para o Supabase:", error);
+                showToast("Erro ao salvar importação no banco: " + error.message, "error");
+                return; 
+            }
+        } catch (err) {
+            console.error("Erro de conexão:", err);
+            showToast("Erro de conexão com o banco de dados.", "error");
+            return;
+        }
+    }
+
+    state.clients.push(...newLeads);
 
                 newLeads.forEach(lead => {
                     state.logs.push({
