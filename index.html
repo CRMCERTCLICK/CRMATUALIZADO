@@ -3036,53 +3036,88 @@ window.loadState = async function loadState() {
                 showToast("Sessão finalizada.");
             }
 
+function subscribeSupabaseRealtime() {
+    try {
+        const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+        if (!db || typeof db.channel !== 'function') return;
 
-let realtimeChannel = null;
+        if (window.realtimeChannel) return;
 
-// 5. Escuta CHAT_MESSAGES (Novas Mensagens do Chat)
-      realtimeChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-            const newMsg = payload.new;
-            if (!state.currentUser) return;
-            if (!state.currentUser) return;
+        const channel = db.channel('crm-realtime-sync');
+        if (!channel) return;
 
-            // Se a mensagem for direcionada para o usuário atual
-            if (newMsg.receiver_id === state.currentUser.id) {
-                const convKey = [newMsg.sender_id, newMsg.receiver_id].sort().join('_');
-                
-                if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
-                if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
+        window.realtimeChannel = channel
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'clients' }, (payload) => {
+                if (state.clients && payload.old) {
+                    state.clients = state.clients.filter(c => c.id !== payload.old.id);
+                    if (typeof refreshAllUI === 'function') refreshAllUI();
+                }
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'accountants' }, (payload) => {
+                if (state.accountants && payload.old) {
+                    state.accountants = state.accountants.filter(a => a.id !== payload.old.id);
+                    if (state.clients) state.clients.forEach(c => { if (c.accountantId === payload.old.id) c.accountantId = ''; });
+                    if (typeof refreshAllUI === 'function') refreshAllUI();
+                }
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'users' }, (payload) => {
+                if (state.users && payload.old) {
+                    state.users = state.users.filter(u => u.id !== payload.old.id);
+                    if (typeof refreshAllUI === 'function') refreshAllUI();
+                    if (typeof showToast === 'function') showToast("Um usuário foi removido pelo administrador.", "info");
+                }
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
+                if (state.users && payload.new) {
+                    const index = state.users.findIndex(u => u.id === payload.new.id);
+                    if (index !== -1) {
+                        state.users[index] = payload.new;
+                        if (state.currentUser && state.currentUser.id === payload.new.id) {
+                            state.currentUser = payload.new;
+                        }
+                        if (typeof refreshAllUI === 'function') refreshAllUI();
+                    }
+                }
+            })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+                const newMsg = payload.new;
+                if (!state.currentUser || !newMsg) return;
 
-                // Adiciona a mensagem se não estiver duplicada
-                if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
-                    state.chat.messages[convKey].push({
-                        id: newMsg.id,
-                        from: newMsg.sender_id,
-                        to: newMsg.receiver_id,
-                        text: newMsg.text,
-                        timestamp: newMsg.created_at,
-                        read: false
-                    });
+                if (newMsg.receiver_id === state.currentUser.id) {
+                    const convKey = [newMsg.sender_id, newMsg.receiver_id].sort().join('_');
+                    if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
+                    if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
 
-                    // Se a conversa não estiver aberta no momento, incrementa o contador e pisca o ícone
-                    if (state.chat.activeConversation !== convKey) {
-                        state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
-                        
-                        // Faz os ícones de chat piscarem em vermelho
-                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
-                            el.classList.add('chat-notify-ping');
+                    if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
+                        state.chat.messages[convKey].push({
+                            id: newMsg.id,
+                            from: newMsg.sender_id,
+                            to: newMsg.receiver_id,
+                            text: newMsg.text,
+                            timestamp: newMsg.created_at,
+                            read: false
                         });
 
-                        if (typeof showToast === 'function') {
-                            showToast("Nova mensagem recebida no chat!", "info");
+                        if (state.chat.activeConversation !== convKey) {
+                            state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
+                            document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
+                                el.classList.add('chat-notify-ping');
+                            });
+                            if (typeof showToast === 'function') showToast("Nova mensagem recebida no chat!", "info");
+                        } else {
+                            if (typeof renderChatMessages === 'function') renderChatMessages();
                         }
-                    } else {
-                        if (typeof renderChatMessages === 'function') renderChatMessages();
-                    }
 
-                    if (typeof renderChatContacts === 'function') renderChatContacts();
+                        if (typeof renderChatContacts === 'function') renderChatContacts();
+                    }
                 }
-            }
-      })
+            });
+
+        window.realtimeChannel.subscribe();
+    } catch (e) {
+        console.warn("Realtime sync warning:", e);
+    }
+}
 
             // ============================================================
             //  ENTRADA NO APP
