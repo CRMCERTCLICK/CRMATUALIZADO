@@ -9213,6 +9213,10 @@ function extractDoc(item) {
 }
 
 // 4. Lógica Principal de Processamento
+function renderRenewalComparison() {
+    if (typeof processarComparativoRenovacao === 'function') processarComparativoRenovacao();
+}
+
 function processarComparativoRenovacao() {
     const prev = state.renewalComparison.prevData || [];
     const curr = state.renewalComparison.currentData || [];
@@ -9263,7 +9267,7 @@ function processarComparativoRenovacao() {
 
                 comparisonResults.push({
                     id: comparisonResults.length + 1,
-                    cliente: pNameStr || cNameStr || 'Nome em Branco na Planilha',
+                    cliente: pNameStr || cNameStr || 'Nome em Branco',
                     documento: pDocStr || extractDoc(cItem) || sDoc || '-',
                     nomePrev: pNameStr || '-',
                     nomeCurr: cNameStr || '-',
@@ -9274,7 +9278,7 @@ function processarComparativoRenovacao() {
                 notRenewedCount++;
                 comparisonResults.push({
                     id: comparisonResults.length + 1,
-                    cliente: pNameStr || 'Nome em Branco na Planilha',
+                    cliente: pNameStr || 'Nome em Branco',
                     documento: pDocStr || '-',
                     nomePrev: pNameStr || '-',
                     nomeCurr: 'Não Localizado',
@@ -9287,7 +9291,7 @@ function processarComparativoRenovacao() {
         curr.forEach((cItem, index) => {
             if (!matchedCurrentIndices.has(index)) {
                 newCount++;
-                const cNameStr = extractNome(cItem) || 'Nome em Branco na Planilha';
+                const cNameStr = extractNome(cItem) || 'Nome em Branco';
                 const cDocStr = extractDoc(cItem) || '-';
 
                 comparisonResults.push({
@@ -9332,26 +9336,32 @@ function processarComparativoRenovacao() {
             }
         });
 
-        // CHAMA A FUNÇÃO COM NOME NOVO E À PROVA DE FALHAS
-        renderizarTabelaBlindada(comparisonResults);
+        desenharTabelaNova2026(comparisonResults);
         if(loader) loader.classList.add('hidden');
         
     }, 500);
 }
 
-// 6. Renderização Blindada da Tabela HTML
-// 6. Renderização Suprema (Ignora divs falsas e força a Tabela)
-function renderizarTabelaBlindada(resultados) {
-    // TRUQUE DE MESTRE: Exige que o navegador ache um TBODY real com esse ID
-    let container = document.querySelector('tbody#renewal-table-body');
-    
-    // Fallback caso a tabela inteira tenha sumido
-    if (!container) container = document.getElementById('renewal-table-body');
-    if (!container) return;
+function desenharTabelaNova2026(resultados) {
+    const wrapper = document.getElementById('renewal-table-wrapper');
+    if (!wrapper) return;
 
-    // Limpa a tela
-    container.innerHTML = '';
+    // O SEGREDO ESTÁ AQUI: Ignorar a div defeituosa e buscar a tag  real
+    let table = wrapper.querySelector('table');
+    if (!table) {
+        table = document.createElement('table');
+        table.className = "w-full text-left";
+        wrapper.appendChild(table);
+    }
 
+    // Pega o TBODY estrutural e real da tabela, ou cria um novo
+    let tbody = table.querySelector('tbody');
+    if (!tbody) {
+        tbody = document.createElement('tbody');
+        table.appendChild(tbody);
+    }
+
+    let html = '';
     resultados.forEach((r) => {
         let badgeClass = ''; let badgeText = ''; let matchIcon = '';
         if (r.status === 'renovado') {
@@ -9368,30 +9378,23 @@ function renderizarTabelaBlindada(resultados) {
             matchIcon = '-';
         }
 
-        // Cria o elemento visual FORÇADO na memória (impede o navegador de apagar)
-        const tr = document.createElement('tr');
-        tr.className = "border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors";
-        
-       tr.innerHTML = `
-            ${r.id}
-            ${r.cliente}
-            ${r.documento}
-            ${r.nomePrev}
-            ${r.nomeCurr}
-            ${matchIcon}
-            ${badgeText}
+        html += `
+            
         `;
-        
-        container.appendChild(tr);
     });
 
-    // Garante que o container se comporte como tabela
-    container.style.display = 'table-row-group';
-    
-    const wrapper = document.getElementById('renewal-table-wrapper');
+    // Injeta as colunas DE FATO dentro da Tabela
+    tbody.innerHTML = html;
+
+    // Limpeza: Esconde a "div expulsa" que causou toda essa dor de cabeça
+    const divBugada = document.getElementById('renewal-table-body');
+    if (divBugada && divBugada.tagName !== 'TBODY') {
+        divBugada.style.display = 'none';
+    }
+
+    wrapper.classList.remove('hidden');
     const placeholder = document.getElementById('renewal-placeholder');
     if (placeholder) placeholder.classList.add('hidden');
-    if (wrapper) wrapper.classList.remove('hidden');
 }
 
     </script>
