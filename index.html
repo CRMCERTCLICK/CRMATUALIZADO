@@ -3135,7 +3135,7 @@ function subscribeSupabaseRealtime() {
                 const newMsg = payload.new;
                 if (!state.currentUser || !newMsg) return;
 
-                const sanitize = id => String(id || '').replace(/^u-/, '').replace(/^usr-?/, '').trim();
+               const sanitize = id => String(id || '').replace(/^u-/, '').replace(/^usr-?/, '').trim();
 
                 const myId = sanitize(state.currentUser.id);
                 const myRole = String(state.currentUser.role || '').toLowerCase();
@@ -3143,16 +3143,23 @@ function subscribeSupabaseRealtime() {
                 const rawReceiver = String(newMsg.receiver_id || '').toLowerCase().trim();
                 const receiverId = sanitize(newMsg.receiver_id);
 
-                // Mapeia se 'dev', 'admin' ou 'master' batem com o usuário atual
+                const invalidIds = ['dev', 'master', 'admin', 'usr'];
                 const isForMe = (receiverId === myId) || 
                                 (senderId === myId) ||
-                                (['dev', 'admin', 'master'].includes(rawReceiver) && (myRole.includes('admin') || myRole.includes('dev') || myId === '1786131242798'));
+                                (invalidIds.includes(rawReceiver) && (myRole.includes('admin') || myRole.includes('master') || myRole.includes('dev') || myId === '1786131242798'));
 
-                console.log(`🔍 Checando exibição: Eu [${myId}] | De [${senderId}] | Para [${receiverId} / ${rawReceiver}] | Aprovado? ${isForMe}`);
+                console.log(`🔍 Checando exibição: Eu [${myId}] | De [${senderId}] | Para [${receiverId}] | Aprovado? ${isForMe}`);
 
-               if (isForMe) {
-                    // Define uma chave de conversa unificada
-                    const otherId = senderId === myId ? (receiverId || 'dev') : senderId;
+                if (isForMe) {
+                    let otherId = senderId === myId ? receiverId : senderId;
+                    
+                    // Converte apelidos recebidos do banco em ID real
+                    if (invalidIds.includes(otherId) && state.users) {
+                        const devU = state.users.find(u => u.role && (u.role.toLowerCase().includes('admin') || u.role.toLowerCase().includes('master') || u.role.toLowerCase().includes('dev')));
+                        if (devU) otherId = sanitize(devU.id);
+                    }
+                    if (invalidIds.includes(otherId)) otherId = '1786131242798'; // Fallback final
+
                     const convKey = [myId, otherId].sort().join('_');
 
                     if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
@@ -3169,17 +3176,13 @@ function subscribeSupabaseRealtime() {
                         });
                     }
 
-                    // <- ADICIONE AQUI: Se nenhuma conversa estiver selecionada no painel, seleciona esta automaticamente
                     if (!state.chat.activeConversation) {
                         state.chat.activeConversation = convKey;
                     }
 
                     if (senderId !== myId) {
                         state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
-                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
-                            el.classList.add('chat-notify-ping');
-                        });
-                        if (typeof showToast === 'function') showToast("Nova mensagem no chat!", "info");
+                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => el.classList.add('chat-notify-ping'));
                     }
 
                     if (typeof renderChatMessages === 'function') renderChatMessages();
@@ -6739,7 +6742,7 @@ async function fetchReceitaFederalBulk(data, type) {
 
             function getChatMessages(conversationId) { return state.chat.messages[conversationId] || []; }
 
-  window.sendChatMessage = async function() {
+ window.sendChatMessage = async function() {
     const input = document.getElementById('chat-message-input');
     if (!input) return;
     const text = input.value.trim();
@@ -6754,29 +6757,32 @@ async function fetchReceitaFederalBulk(data, type) {
     const sanitize = id => String(id || '').replace(/^u-/, '').replace(/^usr-?/, '').trim();
     const myId = sanitize(state.currentUser.id);
 
-    // Tenta obter o ID do destinatário através do contato selecionado ou da chave
     let otherId = '';
     if (state.chat && state.chat.selectedContact && state.chat.selectedContact.id) {
         otherId = sanitize(state.chat.selectedContact.id);
     }
 
-    if (!otherId || otherId === 'dev') {
+    // Lista de "apelidos" que estão sujando o banco de dados
+    const invalidIds = ['dev', 'master', 'admin', 'usr', ''];
+
+    // Se o ID for inválido, tenta extrair da chave da conversa
+    if (invalidIds.includes(otherId)) {
         const parts = activeConv.split('_').map(sanitize);
-        otherId = parts.find(p => p && p !== myId && p !== 'dev') || '';
+        otherId = parts.find(p => p && p !== myId && !invalidIds.includes(p)) || '';
     }
 
-    // Se o contato for o Desenvolvedor/Admin e o ID veio como 'dev' ou vazio, busca na lista de usuários
-    if ((!otherId || otherId === 'dev') && state.users && Array.isArray(state.users)) {
+    // Se continuar inválido, varre os usuários buscando o administrador
+    if (invalidIds.includes(otherId) && state.users && Array.isArray(state.users)) {
         const devUser = state.users.find(u => {
             const role = String(u.role || '').toLowerCase();
             const name = String(u.name || '').toLowerCase();
-            return role.includes('dev') || role.includes('admin') || name.includes('desenvolvedor');
+            return role.includes('dev') || role.includes('admin') || role.includes('master') || name.includes('desenvolvedor');
         });
         if (devUser) otherId = sanitize(devUser.id);
     }
 
-    if (!otherId) {
-        if (typeof showToast === 'function') showToast('Selecione novamente o contato para enviar.', 'error');
+    if (!otherId || invalidIds.includes(otherId)) {
+        if (typeof showToast === 'function') showToast('Selecione o contato novamente para enviar.', 'error');
         return;
     }
 
@@ -6795,11 +6801,7 @@ async function fetchReceitaFederalBulk(data, type) {
     if (db && typeof db.from === 'function') {
         try {
             const { error } = await db.from('chat_messages').insert([msgPayload]);
-            if (error) {
-                console.error("Erro Supabase Chat:", error);
-                if (typeof showToast === 'function') showToast("Erro ao enviar mensagem: " + error.message, "error");
-                return;
-            }
+            if (error) console.error("Erro Supabase Chat:", error);
         } catch (e) {
             console.error("Exceção ao enviar chat:", e);
         }
@@ -6815,6 +6817,12 @@ async function fetchReceitaFederalBulk(data, type) {
         timestamp: msgPayload.created_at,
         read: true
     });
+
+    // Força a atualização do contato selecionado para consertar o cabeçalho
+    state.chat.activeConversation = convKey;
+    if (state.users) {
+        state.chat.selectedContact = state.users.find(u => sanitize(u.id) === otherId) || state.chat.selectedContact;
+    }
 
     if (typeof renderChatMessages === 'function') renderChatMessages();
     if (typeof renderChatContacts === 'function') renderChatContacts();
