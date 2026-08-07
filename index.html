@@ -3031,22 +3031,45 @@ function subscribeSupabaseRealtime() {
     const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
     if (!db || typeof db.channel !== 'function') return;
 
-    // Se já estiver conectado, cancela a execução para evitar o erro do console
+    // Se já estiver conectado, ignora para não dar aquele erro vermelho no console
     if (realtimeChannel) return;
 
-    realtimeChannel = db.channel('clients-realtime-sync')
+    // Criamos um único canal para escutar o CRM inteiro
+    realtimeChannel = db.channel('crm-realtime-sync')
+      // 1. Escuta exclusões na tabela CLIENTS (Leads)
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'clients' },
         (payload) => {
-            console.log("Registro deletado remotamente no Supabase:", payload);
-            
+            console.log("Cliente deletado remotamente:", payload);
             const deletedId = payload.old.id;
             
             if (state.clients.some(c => c.id === deletedId)) {
                 state.clients = state.clients.filter(c => c.id !== deletedId);
                 refreshAllUI();
-                showToast("Um cliente foi removido remotamente no banco.", "info");
+                showToast("Um lead foi removido remotamente.", "info");
+            }
+        }
+      )
+      // 2. Escuta exclusões na tabela ACCOUNTANTS (Parceiros)
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'accountants' },
+        (payload) => {
+            console.log("Parceiro deletado remotamente:", payload);
+            const deletedId = payload.old.id;
+            
+            if (state.accountants.some(a => a.id === deletedId)) {
+                // Remove o parceiro da tela local
+                state.accountants = state.accountants.filter(a => a.id !== deletedId);
+                
+                // Remove a referência desse parceiro dos clientes que o possuíam
+                state.clients.forEach(c => { 
+                    if (c.accountantId === deletedId) c.accountantId = ''; 
+                });
+                
+                refreshAllUI();
+                showToast("Um parceiro foi removido remotamente.", "info");
             }
         }
       )
@@ -3106,28 +3129,6 @@ function subscribeSupabaseRealtime() {
                 updateCurrentMonthAchieved();
                 subscribeSupabaseRealtime();
             }
-function subscribeSupabaseRealtime() {
-    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
-    if (!db || typeof db.channel !== 'function') return;
-
-    db.channel('clients-realtime-sync')
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'clients' },
-        (payload) => {
-            console.log("Registro deletado remotamente no Supabase:", payload);
-            
-            const deletedId = payload.old.id;
-            
-            if (state.clients.some(c => c.id === deletedId)) {
-                state.clients = state.clients.filter(c => c.id !== deletedId);
-                refreshAllUI();
-                showToast("Um cliente foi removido remotamente no banco.", "info");
-            }
-        }
-      )
-      .subscribe();
-}
 
             // ============================================================
             //  CAMPANHAS
@@ -4739,39 +4740,76 @@ async function fetchReceitaFederalBulk(data, type) {
                 document.getElementById('partner-history-section').classList.add('hidden');
             }
 
-            function deleteAccountant(id) {
-                openPremiumConfirm("Remover Parceiro", "Excluir este parceiro da base?", () => {
-                    state.accountants = state.accountants.filter(a => a.id !== id);
-                    state.clients.forEach(c => { if (c.accountantId === id) c.accountantId = ''; });
-                    saveState();
-                    refreshAllUI();
-                    showToast("Parceiro removido.");
-                });
-            }
-
-            function copyAccountantInviteLink() {
-                const url = window.location.origin + window.location.pathname + "?reg=contador";
-                copyText(url, "Link de cadastro de parceiro copiado!");
-                const newPartnerName = prompt('Digite o nome do novo parceiro que está se cadastrando:');
-                if (newPartnerName && newPartnerName.trim()) {
-                    const newId = 'acc-' + Date.now();
-                    state.accountants.push({ 
-                        id: newId, 
-                        name: newPartnerName.trim(), 
-                        crc: '', 
-                        phone: '',
-                        syngularReferrals: 0,
-                        syngularVouchers: [],
-                        registeredViaLink: true,
-                        registeredAt: new Date().toISOString()
-                    });
-                    saveState();
-                    refreshAllUI();
-                    showToast(`Parceiro ${newPartnerName.trim()} cadastrado com sucesso via link!`);
-                    addNotification('Novo Parceiro', `${newPartnerName.trim()} se cadastrou via link.`);
-                    launchConfetti();
+            async function deleteAccountant(id) {
+    openPremiumConfirm("Remover Parceiro", "Excluir este parceiro da base do CRM e do Supabase?", async () => {
+        const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+        
+        if (db && typeof db.from === 'function') {
+            try {
+                const { error } = await db.from('accountants').delete().eq('id', id);
+                if (error) {
+                    console.error("Erro ao deletar parceiro:", error);
+                    showToast("Erro ao excluir no banco: " + error.message, "error");
+                    return;
                 }
+            } catch (err) {
+                showToast("Erro de conexão ao excluir.", "error");
+                return;
             }
+        }
+
+        // Atualiza a tela após deletar com sucesso
+        state.accountants = state.accountants.filter(a => a.id !== id);
+        state.clients.forEach(c => { if (c.accountantId === id) c.accountantId = ''; });
+        
+        saveState();
+        refreshAllUI();
+        showToast("Parceiro removido com sucesso.");
+    });
+}
+
+           async function copyAccountantInviteLink() {
+    const url = window.location.origin + window.location.pathname + "?reg=contador";
+    copyText(url, "Link de cadastro de parceiro copiado!");
+    
+    // Simula a ação do usuário do outro lado preenchendo a tela
+    const newPartnerName = prompt('Simulação: Digite o nome do parceiro que acessou o link e se cadastrou:');
+    
+    if (newPartnerName && newPartnerName.trim()) {
+        const newAccountant = { 
+            id: 'acc-' + Date.now(), 
+            name: newPartnerName.trim(), 
+            crc: '', 
+            phone: '',
+            syngularReferrals: 0,
+            syngularVouchers: [], // Requer coluna JSONB
+            registeredViaLink: true,
+            registeredAt: new Date().toISOString()
+        };
+
+        const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+        
+        if (db && typeof db.from === 'function') {
+            try {
+                const { error } = await db.from('accountants').insert([newAccountant]);
+                if (error) {
+                    showToast("Erro ao simular cadastro no banco: " + error.message, "error");
+                    return;
+                }
+            } catch (err) {
+                showToast("Erro de conexão.", "error");
+                return;
+            }
+        }
+
+        state.accountants.push(newAccountant);
+        saveState();
+        refreshAllUI();
+        showToast(`Parceiro ${newPartnerName.trim()} cadastrado com sucesso via link!`);
+        addNotification('Novo Parceiro', `${newPartnerName.trim()} se cadastrou via link.`);
+        launchConfetti();
+    }
+}
 
             // ============================================================
             //  ACCOUNTANT MODAL
@@ -4836,25 +4874,55 @@ async function fetchReceitaFederalBulk(data, type) {
                 ).join('');
             }
 
-            function saveAccountant() {
-                const id = document.getElementById('acc-id').value;
-                const name = document.getElementById('acc-name').value.trim();
-                const crc = document.getElementById('acc-crc').value.trim();
-                const phone = document.getElementById('acc-phone').value.trim();
-                if (!name) return showToast("Digite o nome!", "error");
-                if (id) {
-                    const i = state.accountants.findIndex(x => x.id === id);
-                    if (i !== -1) state.accountants[i] = { ...state.accountants[i], name, crc, phone,
-                        syngularVouchers: currentModalVouchers };
-                } else {
-                    state.accountants.push({ id: 'acc-' + Date.now(), name, crc, phone, syngularReferrals: 0,
-                        syngularVouchers: currentModalVouchers });
-                }
-                saveState();
-                closeAccountantModal();
-                refreshAllUI();
-                showToast("Parceiro salvo.");
+            async function saveAccountant() {
+    const id = document.getElementById('acc-id').value;
+    const name = document.getElementById('acc-name').value.trim();
+    const crc = document.getElementById('acc-crc').value.trim();
+    const phone = document.getElementById('acc-phone').value.trim();
+    
+    if (!name) return showToast("Digite o nome!", "error");
+    
+    const accData = {
+        id: id || 'acc-' + Date.now(),
+        name: name,
+        crc: crc,
+        phone: phone,
+        syngularReferrals: id ? (state.accountants.find(x => x.id === id)?.syngularReferrals || 0) : 0,
+        // Atenção: A coluna syngularVouchers no Supabase precisa ser do tipo JSONB para isso funcionar
+        syngularVouchers: currentModalVouchers 
+    };
+
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    
+    if (db && typeof db.from === 'function') {
+        try {
+            // upsert atualiza se já existir ou cria se for novo
+            const { error } = await db.from('accountants').upsert([accData]);
+            if (error) {
+                console.error("Erro no Supabase:", error);
+                showToast("Erro ao salvar no banco: " + error.message, "error");
+                return;
             }
+        } catch (err) {
+            console.error("Erro de conexão:", err);
+            showToast("Erro de conexão ao salvar parceiro.", "error");
+            return;
+        }
+    }
+
+    // Salva localmente e atualiza a tela
+    if (id) {
+        const i = state.accountants.findIndex(x => x.id === id);
+        if (i !== -1) state.accountants[i] = accData;
+    } else {
+        state.accountants.push(accData);
+    }
+    
+    saveState();
+    closeAccountantModal();
+    refreshAllUI();
+    showToast("Parceiro salvo com sucesso!");
+}
 
             // ============================================================
             //  TAREFAS RÁPIDAS
