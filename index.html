@@ -59,9 +59,21 @@
                 }
             }
         }
+        
     </script>
 
     <style>
+        /* Animação para piscar o ícone do chat */
+@keyframes chatPulse {
+    0% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.8)); }
+    50% { transform: scale(1.2); filter: drop-shadow(0 0 10px rgba(239, 68, 68, 1)); color: #ef4444 !important; }
+    100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.8)); }
+}
+
+.chat-notify-ping {
+    animation: chatPulse 1s infinite !important;
+    color: #ef4444 !important;
+}
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #020617; color: #f1f5f9; font-family: 'Inter', sans-serif; overflow: hidden; height: 100vh; }
         ::-webkit-scrollbar { width: 3px; height: 3px; }
@@ -3027,54 +3039,50 @@ window.loadState = async function loadState() {
 
 let realtimeChannel = null;
 
-function subscribeSupabaseRealtime() {
-    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
-    if (!db || typeof db.channel !== 'function') return;
+// 5. Escuta CHAT_MESSAGES (Novas Mensagens do Chat)
+      realtimeChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+            const newMsg = payload.new;
+            if (!state.currentUser) return;
+            if (!state.currentUser) return;
 
-    if (realtimeChannel) return;
+            // Se a mensagem for direcionada para o usuário atual
+            if (newMsg.receiver_id === state.currentUser.id) {
+                const convKey = [newMsg.sender_id, newMsg.receiver_id].sort().join('_');
+                
+                if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
+                if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
 
-    realtimeChannel = db.channel('crm-realtime-sync')
-      // 1. Escuta CLIENTS
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'clients' }, (payload) => {
-            const deletedId = payload.old.id;
-            if (state.clients.some(c => c.id === deletedId)) {
-                state.clients = state.clients.filter(c => c.id !== deletedId);
-                refreshAllUI();
-            }
-      })
-      // 2. Escuta ACCOUNTANTS (Parceiros)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'accountants' }, (payload) => {
-            const deletedId = payload.old.id;
-            if (state.accountants.some(a => a.id === deletedId)) {
-                state.accountants = state.accountants.filter(a => a.id !== deletedId);
-                state.clients.forEach(c => { if (c.accountantId === deletedId) c.accountantId = ''; });
-                refreshAllUI();
-            }
-      })
-      // 3. Escuta USERS (Usuários) - NOVO BLOCO
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'users' }, (payload) => {
-            const deletedId = payload.old.id;
-            if (state.users.some(u => u.id === deletedId)) {
-                state.users = state.users.filter(u => u.id !== deletedId);
-                refreshAllUI();
-                showToast("Um usuário foi removido pelo administrador.", "info");
-            }
-      })
-      // 4. Escuta UPDATE em USERS (Mudança de Permissões) - NOVO BLOCO
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
-            const updatedUser = payload.new;
-            const index = state.users.findIndex(u => u.id === updatedUser.id);
-            if (index !== -1) {
-                state.users[index] = updatedUser;
-                // Se o usuário logado teve a permissão alterada, atualiza a sessão dele na hora
-                if (state.currentUser && state.currentUser.id === updatedUser.id) {
-                    state.currentUser = updatedUser;
+                // Adiciona a mensagem se não estiver duplicada
+                if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
+                    state.chat.messages[convKey].push({
+                        id: newMsg.id,
+                        from: newMsg.sender_id,
+                        to: newMsg.receiver_id,
+                        text: newMsg.text,
+                        timestamp: newMsg.created_at,
+                        read: false
+                    });
+
+                    // Se a conversa não estiver aberta no momento, incrementa o contador e pisca o ícone
+                    if (state.chat.activeConversation !== convKey) {
+                        state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
+                        
+                        // Faz os ícones de chat piscarem em vermelho
+                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
+                            el.classList.add('chat-notify-ping');
+                        });
+
+                        if (typeof showToast === 'function') {
+                            showToast("Nova mensagem recebida no chat!", "info");
+                        }
+                    } else {
+                        if (typeof renderChatMessages === 'function') renderChatMessages();
+                    }
+
+                    if (typeof renderChatContacts === 'function') renderChatContacts();
                 }
-                refreshAllUI();
             }
       })
-      .subscribe();
-}
 
             // ============================================================
             //  ENTRADA NO APP
@@ -6621,36 +6629,58 @@ async function fetchReceitaFederalBulk(data, type) {
 
             function getChatMessages(conversationId) { return state.chat.messages[conversationId] || []; }
 
-            function sendChatMessage() {
-                const input = document.getElementById('chat-message-input');
-                const text = input.value.trim();
-                if (!text || !state.currentUser) return;
-                const activeConv = state.chat.activeConversation;
-                if (!activeConv) { showToast('Selecione um contato primeiro.', 'error'); return; }
-                const parts = activeConv.split('_');
-                const otherId = parts[0] === state.currentUser.id ? parts[1] : parts[0];
-                const otherUser = state.users.find(u => u.id === otherId);
-                if (!otherUser) { showToast('Usuário não encontrado.', 'error'); return; }
-                const message = {
-                    id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
-                    from: state.currentUser.id,
-                    to: otherId,
-                    text: text,
-                    timestamp: new Date().toISOString(),
-                    read: false
-                };
-                if (!state.chat.messages[activeConv]) state.chat.messages[activeConv] = [];
-                state.chat.messages[activeConv].push(message);
-                state.chat.unread[activeConv] = 0;
-                certclickChannel.postMessage({ type: 'chat_message', conversationId: activeConv, message: message,
-                    fromName: state.currentUser.name, fromRole: state.currentUser.role });
-                input.value = '';
-                saveChatState();
-                renderChatMessages();
-                renderChatContacts();
-                updateChatUnreadBadge();
-                showToast('Mensagem enviada!');
-            }
+           async function sendChatMessage() {
+    const input = document.getElementById('chat-message-input');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text || !state.currentUser) return;
+
+    const activeConv = state.chat ? state.chat.activeConversation : null;
+    if (!activeConv) { 
+        if (typeof showToast === 'function') showToast('Selecione um contato primeiro.', 'error'); 
+        return; 
+    }
+
+    const parts = activeConv.split('_');
+    const otherId = parts[0] === state.currentUser.id ? parts[1] : parts[0];
+
+    const messagePayload = {
+        id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+        sender_id: state.currentUser.id,
+        receiver_id: otherId,
+        text: text,
+        created_at: new Date().toISOString(),
+        read: false
+    };
+
+    input.value = '';
+
+    // 1. Envia a mensagem para o Supabase
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    if (db && typeof db.from === 'function') {
+        try {
+            const { error } = await db.from('chat_messages').insert([messagePayload]);
+            if (error) console.error("Erro no Supabase Chat:", error);
+        } catch (err) {
+            console.error("Erro de conexão ao enviar mensagem:", err);
+        }
+    }
+
+    // 2. Atualiza a tela localmente
+    if (!state.chat.messages[activeConv]) state.chat.messages[activeConv] = [];
+    state.chat.messages[activeConv].push({
+        id: messagePayload.id,
+        from: messagePayload.sender_id,
+        to: messagePayload.receiver_id,
+        text: messagePayload.text,
+        timestamp: messagePayload.created_at,
+        read: true
+    });
+
+    if (typeof saveChatState === 'function') saveChatState();
+    if (typeof renderChatMessages === 'function') renderChatMessages();
+    if (typeof renderChatContacts === 'function') renderChatContacts();
+}
 
             function handleIncomingChatMessage(data) {
                 const { conversationId, message, fromName, fromRole } = data;
@@ -6768,15 +6798,21 @@ async function fetchReceitaFederalBulk(data, type) {
                     badge.classList.remove('hidden'); } else { badge.classList.add('hidden'); }
             }
 
-            function openChatSidebar() { switchTab('chat'); }
+           function openChatSidebar() { 
+    switchTab('chat'); 
+    document.querySelectorAll('.chat-notify-ping').forEach(el => el.classList.remove('chat-notify-ping'));
+}
 
             function closeChatSidebar() { document.getElementById('chat-sidebar').style.display = 'none'; }
 
             function toggleChatSidebar() {
-                const sidebar = document.getElementById('chat-sidebar');
-                sidebar.style.display = sidebar.style.display === 'flex' ? 'none' : 'flex';
-                if (sidebar.style.display === 'flex') renderChatContactsSidebar();
-            }
+    const sidebar = document.getElementById('chat-sidebar');
+    sidebar.style.display = sidebar.style.display === 'flex' ? 'none' : 'flex';
+    if (sidebar.style.display === 'flex') {
+        renderChatContactsSidebar();
+        document.querySelectorAll('.chat-notify-ping').forEach(el => el.classList.remove('chat-notify-ping'));
+    }
+}
 
             function renderChatContactsSidebar() {
                 const list = document.getElementById('chat-sidebar-contact-list');
