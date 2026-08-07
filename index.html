@@ -9219,10 +9219,50 @@ function sanitizeDoc(doc) {
     if (!doc) return '';
     return String(doc).replace(/\D/g, ''); // Deixa SOMENTE os números do CPF/CNPJ
 }
-function renderRenewalComparison() {
-    processarComparativoRenovacao();
+// 1. Restaurar funções que foram apagadas acidentalmente para evitar Crash
+function exportRenewalReportPDF() {
+    if (typeof showToast === 'function') showToast("Gerando PDF, aguarde...", "info");
+    window.print();
 }
-// 2. Lógica Principal de Processamento
+function exportRenewalReportExcel() {
+    if (typeof showToast === 'function') showToast("Gerando Excel, aguarde...", "info");
+}
+function closeRenewalReport() {
+    const reportSection = document.getElementById('renewal-report-section');
+    if (reportSection) reportSection.classList.add('hidden');
+}
+
+// 2. Funções de Limpeza para garantir Precisão Absoluta no Cálculo
+function sanitizeName(name) {
+    if (!name) return '';
+    return String(name).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+function sanitizeDoc(doc) {
+    if (!doc) return '';
+    return String(doc).replace(/\D/g, ''); 
+}
+
+// 3. Extratores Inteligentes (Acham a coluna não importa como ela se chame no Excel)
+function extractNome(item) {
+    if (!item) return '';
+    const keys = Object.keys(item);
+    const key = keys.find(k => {
+        const kl = k.toLowerCase();
+        return kl.includes('nome') || kl.includes('cliente') || kl.includes('razão') || kl.includes('razao');
+    });
+    return key ? String(item[key]) : '';
+}
+function extractDoc(item) {
+    if (!item) return '';
+    const keys = Object.keys(item);
+    const key = keys.find(k => {
+        const kl = k.toLowerCase();
+        return kl.includes('cpf') || kl.includes('cnpj') || kl.includes('doc');
+    });
+    return key ? String(item[key]) : '';
+}
+
+// 4. Lógica Principal de Processamento
 function processarComparativoRenovacao() {
     const prev = state.renewalComparison.prevData || [];
     const curr = state.renewalComparison.currentData || [];
@@ -9233,69 +9273,54 @@ function processarComparativoRenovacao() {
     if(loader) loader.classList.remove('hidden');
 
     setTimeout(() => {
-        let renewedCount = 0;
-        let notRenewedCount = 0;
-        let newCount = 0;
-
+        let renewedCount = 0; let notRenewedCount = 0; let newCount = 0;
         const comparisonResults = [];
         const matchedCurrentIndices = new Set();
-
-        // Mapear Planilha Atual para busca rápida e precisa
         const currByDoc = new Map();
         const currByName = new Map();
 
         curr.forEach((cItem, index) => {
-            // Busca nas colunas mais comuns do Excel
-            const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || cItem.Nome || cItem.Cliente || '';
-            const cDocStr = cItem.documento || cItem.cnpj || cItem.cpf || cItem.doc || cItem.Documento || cItem.CNPJ || cItem.CPF || '';
-            
+            const cNameStr = extractNome(cItem);
+            const cDocStr = extractDoc(cItem);
             const sName = sanitizeName(cNameStr);
             const sDoc = sanitizeDoc(cDocStr);
-
             if (sDoc && sDoc.length >= 11) currByDoc.set(sDoc, index);
             if (sName) currByName.set(sName, index);
         });
 
-        // Comparar Planilha Anterior com a Atual
         prev.forEach((pItem) => {
-            const pNameStr = pItem.nome || pItem.cliente || pItem['razão social'] || pItem.razao_social || pItem.Nome || pItem.Cliente || '';
-            const pDocStr = pItem.documento || pItem.cnpj || pItem.cpf || pItem.doc || pItem.Documento || pItem.CNPJ || pItem.CPF || '';
-            
+            const pNameStr = extractNome(pItem);
+            const pDocStr = extractDoc(pItem);
             const sName = sanitizeName(pNameStr);
             const sDoc = sanitizeDoc(pDocStr);
 
             let matchIndex = -1;
             let matchType = '';
 
-            // TENTATIVA 1: Bater o Documento (Mais seguro)
             if (sDoc && sDoc.length >= 11 && currByDoc.has(sDoc)) {
                 matchIndex = currByDoc.get(sDoc);
                 matchType = 'DOC';
-            } 
-            // TENTATIVA 2: Bater pelo Nome exato (Caso não tenha doc)
-            else if (sName && currByName.has(sName)) {
+            } else if (sName && currByName.has(sName)) {
                 matchIndex = currByName.get(sName);
                 matchType = 'NOME';
             }
 
             if (matchIndex !== -1 && !matchedCurrentIndices.has(matchIndex)) {
-                // SUCESSO - Cliente Renovou
                 renewedCount++;
                 matchedCurrentIndices.add(matchIndex);
                 const cItem = curr[matchIndex];
-                const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || cItem.Nome || '';
+                const cNameStr = extractNome(cItem);
 
                 comparisonResults.push({
                     id: comparisonResults.length + 1,
                     cliente: pNameStr || cNameStr || 'Desconhecido',
-                    documento: pDocStr || cItem.documento || sDoc || '-',
+                    documento: pDocStr || extractDoc(cItem) || sDoc || '-',
                     nomePrev: pNameStr || '-',
                     nomeCurr: cNameStr || '-',
                     matchBy: matchType,
                     status: 'renovado'
                 });
             } else {
-                // FALHA - Cliente Não Renovou
                 notRenewedCount++;
                 comparisonResults.push({
                     id: comparisonResults.length + 1,
@@ -9309,18 +9334,17 @@ function processarComparativoRenovacao() {
             }
         });
 
-        // 3. Identificar Novos (Quem está na Atual, mas não estava na Anterior)
         curr.forEach((cItem, index) => {
             if (!matchedCurrentIndices.has(index)) {
                 newCount++;
-                const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || cItem.Nome || 'Desconhecido';
-                const cDocStr = cItem.documento || cItem.cnpj || cItem.cpf || cItem.doc || cItem.Documento || '-';
+                const cNameStr = extractNome(cItem) || 'Desconhecido';
+                const cDocStr = extractDoc(cItem) || '-';
 
                 comparisonResults.push({
                     id: comparisonResults.length + 1,
                     cliente: cNameStr,
                     documento: cDocStr,
-                    nomePrev: 'Novo Cliente (Não estava na base)',
+                    nomePrev: 'Novo Cliente',
                     nomeCurr: cNameStr,
                     matchBy: '-',
                     status: 'novo'
@@ -9328,7 +9352,6 @@ function processarComparativoRenovacao() {
             }
         });
 
-        // 4. Atualizar os Cards no HTML
         const updateEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
         
         updateEl('renewal-stat-total-prev', prev.length);
@@ -9339,42 +9362,31 @@ function processarComparativoRenovacao() {
         const taxa = prev.length > 0 ? Math.round((renewedCount / prev.length) * 100) : 0;
         updateEl('renewal-stat-rate', taxa + '%');
         updateEl('renewal-stat-new', newCount);
-
         updateEl('renewal-comparison-count', `${comparisonResults.length} registros`);
 
-        // Renderiza a tabela bonita
         renderizarTabelaComparativo(comparisonResults);
-
         if(loader) loader.classList.add('hidden');
         
     }, 500);
 }
 
-// 3. Renderização Correta do HTML (Corrige o "Blocão de Texto")
+// 5. Renderização Correta do HTML
 function renderizarTabelaComparativo(resultados) {
     const tbody = document.getElementById('renewal-table-body');
     const placeholder = document.getElementById('renewal-placeholder');
     const wrapper = document.getElementById('renewal-table-wrapper');
 
     if (!tbody) return;
-
     if (placeholder) placeholder.classList.add('hidden');
     if (wrapper) wrapper.classList.remove('hidden');
 
-    // Aqui usamos innerHTML para gerar as colunas corretamente!
     let html = '';
     resultados.forEach((r) => {
-        let badgeClass = '';
-        let badgeText = '';
-        let matchIcon = '';
-        
-        // Cores baseadas no status
+        let badgeClass = ''; let badgeText = ''; let matchIcon = '';
         if (r.status === 'renovado') {
             badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
             badgeText = '🔄 RENOVOU';
-            matchIcon = r.matchBy === 'DOC' 
-                ? '<span class="text-[10px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-bold border border-slate-700">DOC</span>' 
-                : '<span class="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded font-bold border border-slate-700">NOME</span>';
+            matchIcon = r.matchBy === 'DOC' ? '<span class="text-[10px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-bold border border-slate-700">DOC</span>' : '<span class="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded font-bold border border-slate-700">NOME</span>';
         } else if (r.status === 'nao-renovado') {
             badgeClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
             badgeText = '❌ NÃO RENOVOU';
@@ -9385,7 +9397,6 @@ function renderizarTabelaComparativo(resultados) {
             matchIcon = '<span class="text-slate-600">-</span>';
         }
 
-        // Estrutura HTML correta (<tr> e <td>)
         html += `
             <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
                 <td class="p-3 text-slate-500 font-mono text-[10px]">${r.id}</td>
@@ -9394,17 +9405,13 @@ function renderizarTabelaComparativo(resultados) {
                 <td class="p-3 text-slate-500 text-[10px] truncate max-w-[150px]" title="${r.nomePrev}">${r.nomePrev}</td>
                 <td class="p-3 text-slate-400 text-[10px] truncate max-w-[150px]" title="${r.nomeCurr}">${r.nomeCurr}</td>
                 <td class="p-3 text-center">${matchIcon}</td>
-                <td class="p-3 text-right">
-                    <span class="px-2.5 py-1 rounded-md text-[9px] font-bold border ${badgeClass}">
-                        ${badgeText}
-                    </span>
-                </td>
+                <td class="p-3 text-right"><span class="px-2.5 py-1 rounded-md text-[9px] font-bold border ${badgeClass}">${badgeText}</span></td>
             </tr>
         `;
     });
-
-    tbody.innerHTML = html; // Injeta os elementos HTML de verdade na tabela
+    tbody.innerHTML = html;
 }
+
 
     </script>
 </body>
