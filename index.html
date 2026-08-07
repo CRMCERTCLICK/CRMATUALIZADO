@@ -9340,21 +9340,18 @@ function processarComparativoRenovacao() {
 }
 
 // 6. Renderização Blindada da Tabela HTML
+// 6. Renderização Suprema (Ignora divs falsas e força a Tabela)
 function renderizarTabelaBlindada(resultados) {
-    // TRUQUE DE MESTRE: Busca o TBODY explicitamente dentro da tag TABLE.
-    // Se existir uma div perdida com o mesmo ID, ela será completamente ignorada!
-    let tbody = document.querySelector('#renewal-table-wrapper table tbody') || document.querySelector('table tbody#renewal-table-body');
+    // TRUQUE DE MESTRE: Exige que o navegador ache um TBODY real com esse ID
+    let container = document.querySelector('tbody#renewal-table-body');
     
-    // Fallback final
-    if (!tbody) tbody = document.getElementById('renewal-table-body');
-    if (!tbody) return;
-    
-    const placeholder = document.getElementById('renewal-placeholder');
-    const wrapper = document.getElementById('renewal-table-wrapper');
-    if (placeholder) placeholder.classList.add('hidden');
-    if (wrapper) wrapper.classList.remove('hidden');
+    // Fallback caso a tabela inteira tenha sumido
+    if (!container) container = document.getElementById('renewal-table-body');
+    if (!container) return;
 
-    let html = '';
+    // Limpa a tela
+    container.innerHTML = '';
+
     resultados.forEach((r) => {
         let badgeClass = ''; let badgeText = ''; let matchIcon = '';
         if (r.status === 'renovado') {
@@ -9371,19 +9368,30 @@ function renderizarTabelaBlindada(resultados) {
             matchIcon = '-';
         }
 
-        html += `
-            
-                ${r.id}
-                ${r.cliente}
-                ${r.documento}
-                ${r.nomePrev}
-                ${r.nomeCurr}
-                ${matchIcon}
-                ${badgeText}
-            
+        // Cria o elemento visual FORÇADO na memória (impede o navegador de apagar)
+        const tr = document.createElement('tr');
+        tr.className = "border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors";
+        
+        tr.innerHTML = `
+            ${r.id}
+            ${r.cliente}
+            ${r.documento}
+            ${r.nomePrev}
+            ${r.nomeCurr}
+            ${matchIcon}
+            ${badgeText}
         `;
+        
+        container.appendChild(tr);
     });
-    tbody.innerHTML = html;
+
+    // Garante que o container se comporte como tabela
+    container.style.display = 'table-row-group';
+    
+    const wrapper = document.getElementById('renewal-table-wrapper');
+    const placeholder = document.getElementById('renewal-placeholder');
+    if (placeholder) placeholder.classList.add('hidden');
+    if (wrapper) wrapper.classList.remove('hidden');
 }
 
     </script>
