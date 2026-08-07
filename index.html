@@ -9212,7 +9212,7 @@ function extractDoc(item) {
     return key ? String(item[key]) : '';
 }
 
-// 4. Lógica Principal
+// 4. Lógica Principal de Processamento
 function processarComparativoRenovacao() {
     const prev = state.renewalComparison.prevData || [];
     const curr = state.renewalComparison.currentData || [];
@@ -9302,7 +9302,6 @@ function processarComparativoRenovacao() {
             }
         });
 
-        // 5. ATUALIZAÇÃO VISUAL INTELIGENTE (Caça onde colocar os números)
         const taxa = prev.length > 0 ? Math.round((renewedCount / prev.length) * 100) : 0;
         const titles = ['ANO ANTERIOR', 'ANO ATUAL', 'RENOVARAM', 'NÃO RENOVARAM', 'TAXA DE RENOVAÇÃO', 'NOVOS'];
         const values = [prev.length, curr.length, renewedCount, notRenewedCount, taxa + '%', newCount];
@@ -9311,7 +9310,6 @@ function processarComparativoRenovacao() {
             const allElements = document.querySelectorAll('*');
             for (let i = 0; i < allElements.length; i++) {
                 const el = allElements[i];
-                // Procura visualmente pela palavra ANO ANTERIOR, etc.
                 if (el.children.length === 0 && el.textContent.trim().toUpperCase() === title) {
                     const parent = el.parentElement;
                     if (parent) {
@@ -9324,7 +9322,6 @@ function processarComparativoRenovacao() {
             }
         });
 
-        // Atualiza os '0 registros' no título da tabela
         document.querySelectorAll('*').forEach(el => {
             if (el.children.length === 0 && el.textContent.includes('registros')) {
                 if (el.textContent === '0 registros' || el.classList.contains('text-sm')) {
@@ -9335,19 +9332,27 @@ function processarComparativoRenovacao() {
             }
         });
 
-        renderizarTabelaComparativo(comparisonResults);
+        // CHAMA A FUNÇÃO COM NOME NOVO E À PROVA DE FALHAS
+        renderizarTabelaBlindada(comparisonResults);
         if(loader) loader.classList.add('hidden');
         
     }, 500);
 }
 
-// 6. Renderização da Tabela HTML
-function renderizarTabelaComparativo(resultados) {
-    const tbody = document.getElementById('renewal-table-body');
+// 6. Renderização Blindada da Tabela HTML
+function renderizarTabelaBlindada(resultados) {
+    // TRUQUE DE MESTRE: Busca o TBODY explicitamente dentro da tag TABLE.
+    // Se existir uma div perdida com o mesmo ID, ela será completamente ignorada!
+    let tbody = document.querySelector('#renewal-table-wrapper table tbody') || document.querySelector('table tbody#renewal-table-body');
+    
+    // Fallback final
+    if (!tbody) tbody = document.getElementById('renewal-table-body');
     if (!tbody) return;
     
-    document.getElementById('renewal-placeholder')?.classList.add('hidden');
-    document.getElementById('renewal-table-wrapper')?.classList.remove('hidden');
+    const placeholder = document.getElementById('renewal-placeholder');
+    const wrapper = document.getElementById('renewal-table-wrapper');
+    if (placeholder) placeholder.classList.add('hidden');
+    if (wrapper) wrapper.classList.remove('hidden');
 
     let html = '';
     resultados.forEach((r) => {
