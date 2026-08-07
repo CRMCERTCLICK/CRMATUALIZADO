@@ -9262,6 +9262,11 @@ function extractDoc(item) {
     return key ? String(item[key]) : '';
 }
 
+function renderRenewalComparison() {
+    if (typeof processarComparativoRenovacao === 'function') {
+        processarComparativoRenovacao();
+    }
+}
 // 4. Lógica Principal de Processamento
 function processarComparativoRenovacao() {
     const prev = state.renewalComparison.prevData || [];
