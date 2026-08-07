@@ -4768,15 +4768,13 @@ async function fetchReceitaFederalBulk(data, type) {
     });
 }
 
-     window.copyAccountantInviteLink = function() {
-    // Cria o link real apontando para o seu próprio CRM com a tag especial
+  window.copyAccountantInviteLink = function() {
+    // Cria o link apontando para o seu CRM, mas com o código secreto do contador
     const url = window.location.origin + window.location.pathname + "?reg=contador";
     
-    // Copia para a área de transferência do seu computador
     navigator.clipboard.writeText(url).then(() => {
         showToast("Link copiado com sucesso! Envie para o contador.", "success");
     }).catch(err => {
-        // Fallback caso o navegador bloqueie a cópia automática
         prompt("Copie o link abaixo para enviar ao parceiro:", url);
     });
 };
@@ -9588,21 +9586,45 @@ function renderizarTabelaFinal(resultados) {
     `;
 }
 
-// Verifica se o link foi acessado com o convite de contador
+// Verifica se o acesso é do contador se cadastrando
 window.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     
-    // Se o link tiver ?reg=contador, ele abre o modal sozinho
     if (urlParams.get('reg') === 'contador') {
+        // 1. Injeta um estilo que ESCONDE o CRM inteiro e mostra só o modal
+        const style = document.createElement('style');
+        style.innerHTML = `
+            /* Esconde todo o CRM (menu, fundo, painel) */
+            body { visibility: hidden !important; background-color: #0f172a !important; }
+            
+            /* Deixa visível apenas o modal de cadastro */
+            #accountant-modal, #accountant-modal * { visibility: visible !important; }
+            
+            /* Faz o modal ficar gigante, no meio da tela preta */
+            #accountant-modal { 
+                display: flex !important; position: fixed !important; top: 0 !important; left: 0 !important; 
+                width: 100vw !important; height: 100vh !important; background-color: #0f172a !important; 
+                z-index: 9999999 !important; justify-content: center !important; align-items: center !important; 
+            }
+            
+            /* Esconde o botão de fechar ou cancelar (para ele não fugir do cadastro e ver o CRM vazio) */
+            #accountant-modal .close-btn, #accountant-modal button[onclick*="close"] { display: none !important; }
+        `;
+        document.head.appendChild(style);
+
+        // 2. Trava a função de fechar o modal. Ao invés de fechar, mostra mensagem de sucesso.
+        window.closeAccountantModal = function() {
+            document.body.innerHTML = '<div style="visibility: visible; color: #34d399; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; background: #0f172a; font-family: sans-serif;"> <h1 style="font-size: 32px; font-weight: bold; margin-bottom: 10px;">✓ Cadastro Concluído!</h1> <p style="color: #94a3b8;">Seus dados foram enviados. Pode fechar esta página.</p> </div>';
+        };
+
+        // 3. Abre o modal automaticamente em 0.5 segundos
         setTimeout(() => {
             if (typeof openAccountantModal === 'function') {
                 openAccountantModal();
-                showToast("Preencha seus dados para se cadastrar como parceiro.", "info");
                 
-                const modalTitle = document.querySelector('#accountant-modal h2');
-                if (modalTitle) {
-                    modalTitle.textContent = "Cadastro de Parceiro Autorizado";
-                }
+                // Troca o título para ficar mais profissional
+                const title = document.querySelector('#accountant-modal h2');
+                if (title) title.textContent = "Cadastro de Parceiro Autorizado";
             }
         }, 500);
     }
