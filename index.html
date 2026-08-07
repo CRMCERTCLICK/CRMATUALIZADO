@@ -9565,6 +9565,169 @@ function renderRenewalComparison() {
     } catch (erro) { console.error("Erro ao renderizar renovações:", erro); }
 }
 
+// Função para normalizar textos e documentos para a comparação
+function normalizeStr(str) {
+    return str ? String(str).toLowerCase().trim() : '';
+}
+
+function extractNumbers(str) {
+    return str ? String(str).replace(/\D/g, '') : ''; // Remove tudo que não for número (pontos, traços)
+}
+
+// Lógica principal de comparação das planilhas
+function processarComparativoRenovacao() {
+    const prev = state.renewalComparison.prevData || [];
+    const curr = state.renewalComparison.currentData || [];
+
+    // Se uma das planilhas ainda não foi enviada, não faz nada
+    if (prev.length === 0 || curr.length === 0) return;
+
+    // Exibir o indicador de processamento
+    const loader = document.getElementById('renewal-processing-indicator');
+    if(loader) loader.classList.remove('hidden');
+
+    setTimeout(() => {
+        let renewedCount = 0;
+        let notRenewedCount = 0;
+        let newCount = 0;
+
+        const comparisonResults = [];
+        const matchedCurrentIndices = new Set(); // Guarda quem da planilha atual já deu "Match"
+
+        // 1. Verificar quem da planilha ANTERIOR está na ATUAL
+        prev.forEach((pItem) => {
+            // Tenta achar colunas comuns nas planilhas (nome, razao_social, cliente, documento, cnpj, cpf)
+            const pNameStr = pItem.nome || pItem.cliente || pItem['razão social'] || pItem.razao_social || '';
+            const pDocStr = pItem.documento || pItem.cnpj || pItem.cpf || pItem.doc || '';
+            
+            const pName = normalizeStr(pNameStr);
+            const pDoc = extractNumbers(pDocStr);
+
+            let matchIndex = curr.findIndex((cItem, index) => {
+                if (matchedCurrentIndices.has(index)) return false; // Se já foi classificado, ignora
+
+                const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || '';
+                const cDocStr = cItem.documento || cItem.cnpj || cItem.cpf || cItem.doc || '';
+                
+                const cName = normalizeStr(cNameStr);
+                const cDoc = extractNumbers(cDocStr);
+
+                // A Mágica: Dá match se o documento for igual (e não vazio) OU o nome for igual (e não vazio)
+                const isDocMatch = (pDoc !== '' && cDoc !== '' && pDoc === cDoc);
+                const isNameMatch = (pName !== '' && cName !== '' && pName === cName);
+
+                return isDocMatch || isNameMatch;
+            });
+
+            if (matchIndex !== -1) {
+                // MATCH ENCONTRADO -> RENOVAÇÃO
+                renewedCount++;
+                matchedCurrentIndices.add(matchIndex);
+                
+                const cItem = curr[matchIndex];
+                comparisonResults.push({
+                    cliente: pNameStr || 'Desconhecido',
+                    documento: pDocStr,
+                    nomePrev: pNameStr,
+                    nomeCurr: cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social,
+                    status: 'renovado' // Renovou
+                });
+            } else {
+                // NÃO ENCONTRADO NA NOVA -> NÃO RENOVOU
+                notRenewedCount++;
+                comparisonResults.push({
+                    cliente: pNameStr || 'Desconhecido',
+                    documento: pDocStr,
+                    nomePrev: pNameStr,
+                    nomeCurr: '-',
+                    status: 'nao-renovado'
+                });
+            }
+        });
+
+        // 2. Verificar quem sobrou na planilha ATUAL (Novos)
+        curr.forEach((cItem, index) => {
+            if (!matchedCurrentIndices.has(index)) {
+                newCount++;
+                
+                const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || 'Desconhecido';
+                const cDocStr = cItem.documento || cItem.cnpj || cItem.cpf || cItem.doc || '';
+
+                comparisonResults.push({
+                    cliente: cNameStr,
+                    documento: cDocStr,
+                    nomePrev: '-',
+                    nomeCurr: cNameStr,
+                    status: 'novo'
+                });
+            }
+        });
+
+        // Calcular Taxa de Renovação
+        const taxaRenovacao = prev.length > 0 ? Math.round((renewedCount / prev.length) * 100) : 0;
+
+        // Atualizar os Cards na Tela
+        document.getElementById('renewal-stat-total-prev').textContent = prev.length;
+        document.getElementById('renewal-stat-total-current').textContent = curr.length;
+        document.getElementById('renewal-stat-renewed').textContent = renewedCount;
+        document.getElementById('renewal-stat-not-renewed').textContent = notRenewedCount;
+        document.getElementById('renewal-stat-rate').textContent = taxaRenovacao + '%';
+        document.getElementById('renewal-stat-new').textContent = newCount;
+
+        // Atualizar Tabela Visual
+        renderizarTabelaComparativo(comparisonResults);
+
+        if(loader) loader.classList.add('hidden');
+        showToast("Comparativo processado com sucesso!", "success");
+
+    }, 500); // Pequeno delay para a animação do loader
+}
+
+// Função para desenhar a tabela
+function renderizarTabelaComparativo(resultados) {
+    const tbody = document.getElementById('renewal-table-body');
+    const placeholder = document.getElementById('renewal-placeholder');
+    const wrapper = document.getElementById('renewal-table-wrapper');
+    const countBadge = document.getElementById('renewal-comparison-count');
+
+    if (!tbody) return;
+
+    placeholder.classList.add('hidden');
+    wrapper.classList.remove('hidden');
+    
+    if(countBadge) countBadge.textContent = resultados.length + ' registros';
+
+    let html = '';
+    resultados.forEach((r, i) => {
+        let badge = '';
+        let matchIcon = '';
+        
+        if (r.status === 'renovado') {
+            badge = '<span class="renewal-badge renewed">🔄 RENOVOU</span>';
+            matchIcon = '<i class="fas fa-check text-emerald-500"></i>';
+        } else if (r.status === 'nao-renovado') {
+            badge = '<span class="renewal-badge not-renewed">❌ NÃO RENOVOU</span>';
+            matchIcon = '<i class="fas fa-times text-rose-500"></i>';
+        } else {
+            badge = '<span class="renewal-badge new">⭐ NOVO</span>';
+            matchIcon = '<i class="fas fa-star text-blue-400"></i>';
+        }
+
+        html += `
+            <tr class="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors">
+                <td class="p-3 text-slate-500">${i + 1}</td>
+                <td class="p-3 font-bold text-slate-200">${r.cliente}</td>
+                <td class="p-3 text-slate-400 font-mono">${r.documento || '-'}</td>
+                <td class="p-3 text-slate-400">${r.nomePrev}</td>
+                <td class="p-3 text-slate-400">${r.nomeCurr}</td>
+                <td class="p-3 text-center">${matchIcon}</td>
+                <td class="p-3">${badge}</td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+}
 
     </script>
 </body>
