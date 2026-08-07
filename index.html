@@ -9695,6 +9695,91 @@ if (new URLSearchParams(window.location.search).get('reg') === 'contador') {
     }, 200);
 }
 
+// Função para sincronização em tempo real via Supabase
+function subscribeSupabaseRealtime() {
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    if (!db || typeof db.channel !== 'function') return;
+
+    if (window.realtimeChannel) return;
+
+    window.realtimeChannel = db.channel('crm-realtime-sync')
+        // 1. Escuta CLIENTS
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'clients' }, (payload) => {
+            const deletedId = payload.old.id;
+            if (state.clients && state.clients.some(c => c.id === deletedId)) {
+                state.clients = state.clients.filter(c => c.id !== deletedId);
+                if (typeof refreshAllUI === 'function') refreshAllUI();
+            }
+        })
+        // 2. Escuta ACCOUNTANTS (Parceiros)
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'accountants' }, (payload) => {
+            const deletedId = payload.old.id;
+            if (state.accountants && state.accountants.some(a => a.id === deletedId)) {
+                state.accountants = state.accountants.filter(a => a.id !== deletedId);
+                if (state.clients) state.clients.forEach(c => { if (c.accountantId === deletedId) c.accountantId = ''; });
+                if (typeof refreshAllUI === 'function') refreshAllUI();
+            }
+        })
+        // 3. Escuta USERS (Deleção)
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'users' }, (payload) => {
+            const deletedId = payload.old.id;
+            if (state.users && state.users.some(u => u.id === deletedId)) {
+                state.users = state.users.filter(u => u.id !== deletedId);
+                if (typeof refreshAllUI === 'function') refreshAllUI();
+                if (typeof showToast === 'function') showToast("Um usuário foi removido pelo administrador.", "info");
+            }
+        })
+        // 4. Escuta USERS (Atualização)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
+            const updatedUser = payload.new;
+            if (state.users) {
+                const index = state.users.findIndex(u => u.id === updatedUser.id);
+                if (index !== -1) {
+                    state.users[index] = updatedUser;
+                    if (state.currentUser && state.currentUser.id === updatedUser.id) {
+                        state.currentUser = updatedUser;
+                    }
+                    if (typeof refreshAllUI === 'function') refreshAllUI();
+                }
+            }
+        })
+        // 5. Escuta CHAT_MESSAGES
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+            const newMsg = payload.new;
+            if (!state.currentUser) return;
+
+            if (newMsg.receiver_id === state.currentUser.id) {
+                const convKey = [newMsg.sender_id, newMsg.receiver_id].sort().join('_');
+                if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
+                if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
+
+                if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
+                    state.chat.messages[convKey].push({
+                        id: newMsg.id,
+                        from: newMsg.sender_id,
+                        to: newMsg.receiver_id,
+                        text: newMsg.text,
+                        timestamp: newMsg.created_at,
+                        read: false
+                    });
+
+                    if (state.chat.activeConversation !== convKey) {
+                        state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
+                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
+                            el.classList.add('chat-notify-ping');
+                        });
+                        if (typeof showToast === 'function') showToast("Nova mensagem recebida no chat!", "info");
+                    } else {
+                        if (typeof renderChatMessages === 'function') renderChatMessages();
+                    }
+
+                    if (typeof renderChatContacts === 'function') renderChatContacts();
+                }
+            }
+        })
+        .subscribe();
+}
+
     </script>
 </body>
 </html>
