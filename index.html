@@ -3150,23 +3150,13 @@ function subscribeSupabaseRealtime() {
 
                 console.log(`🔍 Checando exibição: Eu [${myId}] | De [${senderId}] | Para [${receiverId} / ${rawReceiver}] | Aprovado? ${isForMe}`);
 
-                if (isForMe) {
+               if (isForMe) {
                     // Define uma chave de conversa unificada
                     const otherId = senderId === myId ? (receiverId || 'dev') : senderId;
                     const convKey = [myId, otherId].sort().join('_');
 
                     if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
-                    
-                    // Garante que a chave exista no state
-                    if (!state.chat.messages[convKey]) {
-                        // Tenta achar em chaves alternativas
-                        const altKey = Object.keys(state.chat.messages).find(k => k.includes(senderId) || k.includes(receiverId));
-                        if (altKey) {
-                            state.chat.messages[convKey] = state.chat.messages[altKey];
-                        } else {
-                            state.chat.messages[convKey] = [];
-                        }
-                    }
+                    if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
 
                     if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
                         state.chat.messages[convKey].push({
@@ -3177,6 +3167,11 @@ function subscribeSupabaseRealtime() {
                             timestamp: newMsg.created_at,
                             read: senderId !== myId ? false : true
                         });
+                    }
+
+                    // <- ADICIONE AQUI: Se nenhuma conversa estiver selecionada no painel, seleciona esta automaticamente
+                    if (!state.chat.activeConversation) {
+                        state.chat.activeConversation = convKey;
                     }
 
                     if (senderId !== myId) {
