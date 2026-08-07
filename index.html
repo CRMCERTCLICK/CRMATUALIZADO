@@ -4768,48 +4768,18 @@ async function fetchReceitaFederalBulk(data, type) {
     });
 }
 
-           async function copyAccountantInviteLink() {
+     window.copyAccountantInviteLink = function() {
+    // Cria o link real apontando para o seu próprio CRM com a tag especial
     const url = window.location.origin + window.location.pathname + "?reg=contador";
-    copyText(url, "Link de cadastro de parceiro copiado!");
     
-    // Simula a ação do usuário do outro lado preenchendo a tela
-    const newPartnerName = prompt('Simulação: Digite o nome do parceiro que acessou o link e se cadastrou:');
-    
-    if (newPartnerName && newPartnerName.trim()) {
-        const newAccountant = { 
-            id: 'acc-' + Date.now(), 
-            name: newPartnerName.trim(), 
-            crc: '', 
-            phone: '',
-            syngularReferrals: 0,
-            syngularVouchers: [], // Requer coluna JSONB
-            registeredViaLink: true,
-            registeredAt: new Date().toISOString()
-        };
-
-        const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
-        
-        if (db && typeof db.from === 'function') {
-            try {
-                const { error } = await db.from('accountants').insert([newAccountant]);
-                if (error) {
-                    showToast("Erro ao simular cadastro no banco: " + error.message, "error");
-                    return;
-                }
-            } catch (err) {
-                showToast("Erro de conexão.", "error");
-                return;
-            }
-        }
-
-        state.accountants.push(newAccountant);
-        saveState();
-        refreshAllUI();
-        showToast(`Parceiro ${newPartnerName.trim()} cadastrado com sucesso via link!`);
-        addNotification('Novo Parceiro', `${newPartnerName.trim()} se cadastrou via link.`);
-        launchConfetti();
-    }
-}
+    // Copia para a área de transferência do seu computador
+    navigator.clipboard.writeText(url).then(() => {
+        showToast("Link copiado com sucesso! Envie para o contador.", "success");
+    }).catch(err => {
+        // Fallback caso o navegador bloqueie a cópia automática
+        prompt("Copie o link abaixo para enviar ao parceiro:", url);
+    });
+};
 
             // ============================================================
             //  ACCOUNTANT MODAL
@@ -9617,6 +9587,26 @@ function renderizarTabelaFinal(resultados) {
         </div>
     `;
 }
+
+// Verifica se o link foi acessado com o convite de contador
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Se o link tiver ?reg=contador, ele abre o modal sozinho
+    if (urlParams.get('reg') === 'contador') {
+        setTimeout(() => {
+            if (typeof openAccountantModal === 'function') {
+                openAccountantModal();
+                showToast("Preencha seus dados para se cadastrar como parceiro.", "info");
+                
+                const modalTitle = document.querySelector('#accountant-modal h2');
+                if (modalTitle) {
+                    modalTitle.textContent = "Cadastro de Parceiro Autorizado";
+                }
+            }
+        }, 500);
+    }
+});
 
     </script>
 </body>
