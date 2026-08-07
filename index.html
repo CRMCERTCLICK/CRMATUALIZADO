@@ -6744,7 +6744,7 @@ async function fetchReceitaFederalBulk(data, type) {
 
             function getChatMessages(conversationId) { return state.chat.messages[conversationId] || []; }
 
-    window.sendChatMessage = async function() {
+  window.sendChatMessage = async function() {
     const input = document.getElementById('chat-message-input');
     if (!input) return;
     const text = input.value.trim();
@@ -6757,30 +6757,31 @@ async function fetchReceitaFederalBulk(data, type) {
     }
 
     const sanitize = id => String(id || '').replace(/^u-/, '').replace(/^usr-?/, '').trim();
-
     const myId = sanitize(state.currentUser.id);
-    const parts = activeConv.split('_').map(sanitize);
 
-    // Pega o ID da conversa diferente do meu ID
-    let otherRawId = parts.find(p => p && p !== myId) || '';
+    // Tenta obter o ID do destinatário através do contato selecionado ou da chave
+    let otherId = '';
+    if (state.chat && state.chat.selectedContact && state.chat.selectedContact.id) {
+        otherId = sanitize(state.chat.selectedContact.id);
+    }
 
-    // Se o ID for um alias como 'dev', 'admin', ou similar, tenta resolver para o ID numérico real
-    let otherId = otherRawId;
-    if (state.users && Array.isArray(state.users)) {
-        const matchedUser = state.users.find(u => {
-            const uid = sanitize(u.id);
-            const uRole = String(u.role || '').toLowerCase();
-            const uName = String(u.name || '').toLowerCase();
-            return uid === otherRawId || uRole === otherRawId || uName.includes(otherRawId);
+    if (!otherId || otherId === 'dev') {
+        const parts = activeConv.split('_').map(sanitize);
+        otherId = parts.find(p => p && p !== myId && p !== 'dev') || '';
+    }
+
+    // Se o contato for o Desenvolvedor/Admin e o ID veio como 'dev' ou vazio, busca na lista de usuários
+    if ((!otherId || otherId === 'dev') && state.users && Array.isArray(state.users)) {
+        const devUser = state.users.find(u => {
+            const role = String(u.role || '').toLowerCase();
+            const name = String(u.name || '').toLowerCase();
+            return role.includes('dev') || role.includes('admin') || name.includes('desenvolvedor');
         });
-        if (matchedUser) {
-            otherId = sanitize(matchedUser.id);
-        }
+        if (devUser) otherId = sanitize(devUser.id);
     }
 
     if (!otherId) {
-        console.error("Não foi possível determinar o destinatário para:", activeConv);
-        if (typeof showToast === 'function') showToast('Erro ao identificar destinatário. Selecione o contato novamente.', 'error');
+        if (typeof showToast === 'function') showToast('Selecione novamente o contato para enviar.', 'error');
         return;
     }
 
@@ -6795,7 +6796,6 @@ async function fetchReceitaFederalBulk(data, type) {
 
     input.value = '';
 
-    // Envia ao Supabase
     const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
     if (db && typeof db.from === 'function') {
         try {
@@ -6810,7 +6810,6 @@ async function fetchReceitaFederalBulk(data, type) {
         }
     }
 
-    // Atualiza localmente no remetente
     const convKey = [myId, otherId].sort().join('_');
     if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
     state.chat.messages[convKey].push({
