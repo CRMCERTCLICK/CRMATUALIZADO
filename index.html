@@ -3135,12 +3135,13 @@ function subscribeSupabaseRealtime() {
                 if (!state.currentUser || !newMsg) return;
 
                 const sanitize = id => String(id || '').replace(/^u-/, '').trim();
+                const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
 
-                const myId = sanitize(state.currentUser.id);
-                const senderId = sanitize(newMsg.sender_id);
-                const receiverId = sanitize(newMsg.receiver_id);
+                const myId = normalizeDev(sanitize(state.currentUser.id));
+                const senderId = normalizeDev(sanitize(newMsg.sender_id));
+                const receiverId = normalizeDev(sanitize(newMsg.receiver_id));
 
-                console.log(`🔍 Recebido Realtime: Eu [${myId}] | De [${senderId}] | Para [${receiverId}]`);
+                console.log(`🔍 Realtime Unificado: Eu [${myId}] | De [${senderId}] | Para [${receiverId}]`);
 
                 if (receiverId === myId || senderId === myId) {
                     const otherId = senderId === myId ? receiverId : senderId;
@@ -3152,7 +3153,7 @@ function subscribeSupabaseRealtime() {
                     if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
                         state.chat.messages[convKey].push({
                             id: newMsg.id,
-                            from: senderId,
+                            from: senderId, // Mantém o remetente original unificado
                             to: receiverId,
                             text: newMsg.text,
                             timestamp: newMsg.created_at,
@@ -6733,29 +6734,25 @@ window.sendChatMessage = async function() {
     if (!text || !state.currentUser) return;
 
     const sanitize = id => String(id || '').replace(/^u-/, '').trim();
-    const myId = sanitize(state.currentUser.id);
+    
+    // TRADUTOR DE IDs: Unifica todos os nomes zumbis do desenvolvedor
+    const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
+    
+    const myId = normalizeDev(sanitize(state.currentUser.id));
     const activeConv = state.chat ? state.chat.activeConversation : null;
 
     let otherId = '';
-    
-    // 1. Tenta pegar do contato que está ativamente selecionado na tela
     if (state.chat?.selectedContact?.id) {
         otherId = sanitize(state.chat.selectedContact.id);
     }
-    
-    // 2. Se falhar, tenta extrair da chave da conversa (ignorando o meu próprio ID)
     if (!otherId || otherId === myId) {
         const parts = (activeConv || '').split('_').map(sanitize);
         otherId = parts.find(p => p && p !== myId) || '';
     }
 
-    // 3. Se AINDA der erro (Efeito Espelho), tenta forçar o envio para o Desenvolvedor
-    if (!otherId || otherId === myId) {
-        const admin = state.users?.find(u => String(u.role).toLowerCase() === 'admin' || String(u.id).includes('dev_master'));
-        if (admin) otherId = sanitize(admin.id);
-    }
+    // Aplica o tradutor no destinatário também
+    otherId = normalizeDev(otherId);
 
-    // 4. Trava de Segurança Máxima: Se tudo falhar, bloqueia o envio e avisa o usuário
     if (!otherId || otherId === myId) {
         if (typeof showToast === 'function') showToast('Por favor, clique no contato na lista à esquerda novamente.', 'error');
         return; 
@@ -6772,7 +6769,6 @@ window.sendChatMessage = async function() {
 
     input.value = '';
 
-    // Envia para o Supabase
     const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
     if (db && typeof db.from === 'function') {
         try {
@@ -6784,7 +6780,6 @@ window.sendChatMessage = async function() {
         }
     }
 
-    // Renderiza localmente a mensagem na hora
     const convKey = [myId, otherId].sort().join('_');
     if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
     state.chat.messages[convKey].push({
@@ -6923,11 +6918,16 @@ window.sendChatMessage = async function() {
                 const otherUser = state.users.find(u => u.id === otherId);
                 const otherName = otherUser ? otherUser.name : 'Usuário';
                 container.innerHTML = messages.map(msg => {
-                   const myCleanId = String(state.currentUser?.id || '').replace(/^u-/, '').trim();
-        const msgFromClean = String(msg.from || msg.sender_id || '').replace(/^u-/, '').trim();
+            // Usa o mesmo tradutor para os balões na tela
+        const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
+        
+        const myCleanId = normalizeDev(String(state.currentUser?.id || '').replace(/^u-/, '').trim());
+        const msgFromClean = normalizeDev(String(msg.from || msg.sender_id || '').replace(/^u-/, '').trim());
+        
         const isSent = msgFromClean === myCleanId;
-                    const senderName = isSent ? 'Você' : otherName;
-                    const time = formatDateBR(msg.timestamp);
+        
+        const senderName = isSent ? 'Você' : otherName;
+        const time = typeof formatDateBR === 'function' ? formatDateBR(msg.timestamp) : msg.timestamp;
                     return `<div class="flex flex-col ${isSent ? 'items-end' : 'items-start'}">
                         <div class="chat-message ${isSent ? 'sent' : 'received'} rounded-xl px-3 py-2 text-sm max-w-[75%]">
                             <p class="whitespace-pre-wrap break-words">${escapeHTML(msg.text)}</p>
