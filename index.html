@@ -8080,6 +8080,11 @@ function renderizarTabelaComparativo(resultados) {
                 }
             }
 
+            function closeRenewalReport() {
+    const reportSection = document.getElementById('renewal-report-section');
+    if (reportSection) reportSection.classList.add('hidden');
+}
+
             // ============================================================
             //  FINANCEIRO
             // ============================================================
@@ -9131,91 +9136,6 @@ function handleRenewalUpload(event, type) {
 }
 
 
-// 4. RENDERIZADOR FORMATADO EM TABELA
-function renderRenewalComparison() {
-    try {
-        var results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-        var prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
-        var currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
-
-        var renovaram = 0, naoRenovaram = 0, novos = 0;
-        for (var r = 0; r < results.length; r++) {
-            if (results[r].status === 'RENOVOU') renovaram++;
-            else if (results[r].status === 'NÃO RENOVOU') naoRenovaram++;
-            else novos++;
-        }
-
-        var totalPrev = prevData.length;
-        var totalCurrent = currentData.length;
-        var taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
-
-        var setVal = function(id, val) { 
-            var el = document.getElementById(id); 
-            if (el) el.innerText = val; 
-        };
-
-        setVal('renewal-val-prev', totalPrev);
-        setVal('renewal-val-current', totalCurrent);
-        setVal('renewal-val-renovaram', renovaram);
-        setVal('renewal-val-nao-renovaram', naoRenovaram);
-        setVal('renewal-val-taxa', taxa + '%');
-        setVal('renewal-val-novos', novos);
-        setVal('renewal-prev-count', totalPrev);
-        setVal('renewal-current-count', totalCurrent);
-        setVal('renewal-total-records', results.length + ' registros');
-
-        var tableBody = document.getElementById('renewal-table-body');
-        var tableWrapper = document.getElementById('renewal-table-wrapper');
-        var placeholder = document.getElementById('renewal-placeholder');
-
-        if (results.length === 0) {
-            renderEmptyComparison();
-            return;
-        }
-
-        if (placeholder) placeholder.classList.add('hidden');
-        if (tableWrapper) tableWrapper.classList.remove('hidden');
-
-        var rowsHtml = '';
-        for (var z = 0; z < results.length; z++) {
-            var row = results[z];
-            var statusBadge = '';
-            if (row.status === 'RENOVOU') {
-                statusBadge = '🔄 RENOVOU';
-            } else if (row.status === 'NÃO RENOVOU') {
-                statusBadge = '❌ NÃO RENOVOU';
-            } else {
-                statusBadge = '⭐ NOVO';
-            }
-
-            var matchBadge = '-';
-            if (row.matchType && row.matchType !== '-') {
-                matchBadge = '📇 ' + row.matchType + '';
-            }
-
-            var nomeExibicao = (row.clientPrev && row.clientPrev !== 'Não presente') ? row.clientPrev : (row.clientCurrent || '-');
-            var docExibicao = row.doc || '-';
-
-            rowsHtml += '' +
-                '' + (z + 1) + '' +
-                '' + nomeExibicao + '' +
-                '' + docExibicao + '' +
-                '' + (row.namePrev || '-') + '' +
-                '' + (row.nameCurrent || '-') + '' +
-                '' + matchBadge + '' +
-                '' + statusBadge + '' +
-                '';
-        }
-
-        if (tableBody) {
-            tableBody.innerHTML = rowsHtml;
-        }
-
-    } catch (erro) {
-        console.error("Erro ao renderizar renovações:", erro);
-    }
-}
-
 async function fetchReceitaFederalBulk(data, type) {
     if (!data || data.length === 0) {
         showToast('Nenhum dado carregado para buscar.', 'error');
@@ -9400,71 +9320,6 @@ function processRenewalComparison() {
     state.renewalComparison.results = results;
 }
 
-function renderRenewalComparison() {
-    try {
-        var results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-        var renovaram = 0, naoRenovaram = 0, novos = 0;
-        
-        for (var r = 0; r < results.length; r++) {
-            if (results[r].status === 'RENOVOU') renovaram++;
-            else if (results[r].status === 'NÃO RENOVOU') naoRenovaram++;
-            else novos++;
-        }
-
-        var totalPrev = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData.length : 0;
-        var totalCurrent = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData.length : 0;
-        var taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
-
-        var setVal = function(id, val) { var el = document.getElementById(id); if (el) el.innerText = val; };
-        setVal('renewal-val-prev', totalPrev);
-        setVal('renewal-val-current', totalCurrent);
-        setVal('renewal-val-renovaram', renovaram);
-        setVal('renewal-val-nao-renovaram', naoRenovaram);
-        setVal('renewal-val-taxa', taxa + '%');
-        setVal('renewal-val-novos', novos);
-        setVal('renewal-prev-count', totalPrev);
-        setVal('renewal-current-count', totalCurrent);
-        setVal('renewal-total-records', results.length + ' registros');
-
-        var tableBody = document.getElementById('renewal-table-body');
-        var tableWrapper = document.getElementById('renewal-table-wrapper');
-        var placeholder = document.getElementById('renewal-placeholder');
-
-        if (results.length === 0) {
-            if (placeholder) placeholder.classList.remove('hidden');
-            if (tableWrapper) tableWrapper.classList.add('hidden');
-            return;
-        }
-
-        if (placeholder) placeholder.classList.add('hidden');
-        if (tableWrapper) tableWrapper.classList.remove('hidden');
-
-        var rowsHtml = '';
-        for (var z = 0; z < results.length; z++) {
-            var row = results[z];
-            var statusBadge = '';
-            if (row.status === 'RENOVOU') statusBadge = '🔄 RENOVOU';
-            else if (row.status === 'NÃO RENOVOU') statusBadge = '❌ NÃO RENOVOU';
-            else statusBadge = '⭐ NOVO';
-
-            var matchBadge = (row.matchType && row.matchType !== '-') ? '📇 ' + row.matchType + '' : '-';
-            var nomeExibicao = (row.clientPrev && row.clientPrev !== 'Não presente') ? row.clientPrev : (row.clientCurrent || '-');
-            
-            rowsHtml += '' +
-                '' + (z + 1) + '' +
-                '' + nomeExibicao + '' +
-                '' + (row.doc || '-') + '' +
-                '' + (row.namePrev || '-') + '' +
-                '' + (row.nameCurrent || '-') + '' +
-                '' + matchBadge + '' +
-                '' + statusBadge + '' +
-                '';
-        }
-
-        if (tableBody) tableBody.innerHTML = rowsHtml;
-
-    } catch (erro) { console.error("Erro ao renderizar renovações:", erro); }
-}
 
 // Função para normalizar textos e documentos para a comparação
 function normalizeStr(str) {
