@@ -3035,6 +3035,57 @@ window.loadState = async function loadState() {
                 closeFloatingChat();
                 showToast("Sessão finalizada.");
             }
+// Busca todo o histórico de mensagens do Supabase para o usuário logado
+async function loadChatMessages() {
+    if (!state.currentUser) return;
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    if (!db || typeof db.from !== 'function') return;
+
+    try {
+        const myId = String(state.currentUser.id);
+
+        // Busca mensagens onde o usuário é remetente OU destinatário
+        const { data, error } = await db
+            .from('chat_messages')
+            .select('*')
+            .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            console.error("Erro ao buscar histórico do chat:", error);
+            return;
+        }
+
+        if (data) {
+            if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
+
+            data.forEach(msg => {
+                const senderId = String(msg.sender_id);
+                const receiverId = String(msg.receiver_id);
+                const convKey = [senderId, receiverId].sort().join('_');
+
+                if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
+
+                if (!state.chat.messages[convKey].some(m => m.id === msg.id)) {
+                    state.chat.messages[convKey].push({
+                        id: msg.id,
+                        from: senderId,
+                        to: receiverId,
+                        text: msg.text,
+                        timestamp: msg.created_at,
+                        read: msg.read
+                    });
+                }
+            });
+
+            if (typeof renderChatMessages === 'function') renderChatMessages();
+            if (typeof renderChatContacts === 'function') renderChatContacts();
+            if (typeof renderChatContactsSidebar === 'function') renderChatContactsSidebar();
+        }
+    } catch (e) {
+        console.error("Exceção ao carregar histórico do chat:", e);
+    }
+}
 
 function subscribeSupabaseRealtime() {
     try {
@@ -3085,9 +3136,10 @@ function subscribeSupabaseRealtime() {
             })
             // 5. Escuta CHAT_MESSAGES (Novas Mensagens para Qualquer Usuário)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+                console.log("⚡ CHEGOU NO REALTIME:", payload.new); // <--- Adicione esta linha AQUI
                 const newMsg = payload.new;
                 if (!state.currentUser || !newMsg) return;
-
+                
                 const myId = String(state.currentUser.id);
                 const senderId = String(newMsg.sender_id);
                 const receiverId = String(newMsg.receiver_id);
@@ -6848,9 +6900,9 @@ async function fetchReceitaFederalBulk(data, type) {
                 if (totalUnread > 0) { badge.textContent = totalUnread;
                     badge.classList.remove('hidden'); } else { badge.classList.add('hidden'); }
             }
-
-           function openChatSidebar() { 
+function openChatSidebar() { 
     switchTab('chat'); 
+    loadChatMessages(); // <--- Adicionado para puxar as mensagens do banco
     document.querySelectorAll('.chat-notify-ping').forEach(el => el.classList.remove('chat-notify-ping'));
 }
 
