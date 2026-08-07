@@ -9220,6 +9220,7 @@ function sanitizeDoc(doc) {
     return String(doc).replace(/\D/g, ''); // Deixa SOMENTE os números do CPF/CNPJ
 }
 // 1. Restaurar funções que foram apagadas acidentalmente para evitar Crash
+// 1. Restaurar funções vitais
 function exportRenewalReportPDF() {
     if (typeof showToast === 'function') showToast("Gerando PDF, aguarde...", "info");
     window.print();
@@ -9231,8 +9232,11 @@ function closeRenewalReport() {
     const reportSection = document.getElementById('renewal-report-section');
     if (reportSection) reportSection.classList.add('hidden');
 }
+function renderRenewalComparison() {
+    if (typeof processarComparativoRenovacao === 'function') processarComparativoRenovacao();
+}
 
-// 2. Funções de Limpeza para garantir Precisão Absoluta no Cálculo
+// 2. Funções de Limpeza
 function sanitizeName(name) {
     if (!name) return '';
     return String(name).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -9242,13 +9246,15 @@ function sanitizeDoc(doc) {
     return String(doc).replace(/\D/g, ''); 
 }
 
-// 3. Extratores Inteligentes (Acham a coluna não importa como ela se chame no Excel)
+// 3. Extratores Cão Farejador (Procura por sinônimos)
 function extractNome(item) {
     if (!item) return '';
     const keys = Object.keys(item);
     const key = keys.find(k => {
-        const kl = k.toLowerCase();
-        return kl.includes('nome') || kl.includes('cliente') || kl.includes('razão') || kl.includes('razao');
+        const kl = String(k).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return kl.includes('nome') || kl.includes('cliente') || kl.includes('razao') || 
+               kl.includes('fantasia') || kl.includes('empresa') || kl.includes('sacado') || 
+               kl.includes('titular') || kl.includes('favorecido') || kl.includes('descricao');
     });
     return key ? String(item[key]) : '';
 }
@@ -9256,18 +9262,13 @@ function extractDoc(item) {
     if (!item) return '';
     const keys = Object.keys(item);
     const key = keys.find(k => {
-        const kl = k.toLowerCase();
+        const kl = String(k).toLowerCase();
         return kl.includes('cpf') || kl.includes('cnpj') || kl.includes('doc');
     });
     return key ? String(item[key]) : '';
 }
 
-function renderRenewalComparison() {
-    if (typeof processarComparativoRenovacao === 'function') {
-        processarComparativoRenovacao();
-    }
-}
-// 4. Lógica Principal de Processamento
+// 4. Lógica Principal
 function processarComparativoRenovacao() {
     const prev = state.renewalComparison.prevData || [];
     const curr = state.renewalComparison.currentData || [];
@@ -9318,7 +9319,7 @@ function processarComparativoRenovacao() {
 
                 comparisonResults.push({
                     id: comparisonResults.length + 1,
-                    cliente: pNameStr || cNameStr || 'Desconhecido',
+                    cliente: pNameStr || cNameStr || 'Nome em Branco na Planilha',
                     documento: pDocStr || extractDoc(cItem) || sDoc || '-',
                     nomePrev: pNameStr || '-',
                     nomeCurr: cNameStr || '-',
@@ -9329,7 +9330,7 @@ function processarComparativoRenovacao() {
                 notRenewedCount++;
                 comparisonResults.push({
                     id: comparisonResults.length + 1,
-                    cliente: pNameStr || 'Desconhecido',
+                    cliente: pNameStr || 'Nome em Branco na Planilha',
                     documento: pDocStr || '-',
                     nomePrev: pNameStr || '-',
                     nomeCurr: 'Não Localizado',
@@ -9342,7 +9343,7 @@ function processarComparativoRenovacao() {
         curr.forEach((cItem, index) => {
             if (!matchedCurrentIndices.has(index)) {
                 newCount++;
-                const cNameStr = extractNome(cItem) || 'Desconhecido';
+                const cNameStr = extractNome(cItem) || 'Nome em Branco na Planilha';
                 const cDocStr = extractDoc(cItem) || '-';
 
                 comparisonResults.push({
@@ -9357,17 +9358,38 @@ function processarComparativoRenovacao() {
             }
         });
 
-        const updateEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        
-        updateEl('renewal-stat-total-prev', prev.length);
-        updateEl('renewal-stat-total-current', curr.length);
-        updateEl('renewal-stat-renewed', renewedCount);
-        updateEl('renewal-stat-not-renewed', notRenewedCount);
-        
+        // 5. ATUALIZAÇÃO VISUAL INTELIGENTE (Caça onde colocar os números)
         const taxa = prev.length > 0 ? Math.round((renewedCount / prev.length) * 100) : 0;
-        updateEl('renewal-stat-rate', taxa + '%');
-        updateEl('renewal-stat-new', newCount);
-        updateEl('renewal-comparison-count', `${comparisonResults.length} registros`);
+        const titles = ['ANO ANTERIOR', 'ANO ATUAL', 'RENOVARAM', 'NÃO RENOVARAM', 'TAXA DE RENOVAÇÃO', 'NOVOS'];
+        const values = [prev.length, curr.length, renewedCount, notRenewedCount, taxa + '%', newCount];
+
+        titles.forEach((title, index) => {
+            const allElements = document.querySelectorAll('*');
+            for (let i = 0; i < allElements.length; i++) {
+                const el = allElements[i];
+                // Procura visualmente pela palavra ANO ANTERIOR, etc.
+                if (el.children.length === 0 && el.textContent.trim().toUpperCase() === title) {
+                    const parent = el.parentElement;
+                    if (parent) {
+                        const numEl = parent.querySelector('.text-3xl, .text-4xl, h2');
+                        if (numEl) { numEl.textContent = values[index]; } 
+                        else if (el.nextElementSibling) { el.nextElementSibling.textContent = values[index]; }
+                    }
+                    break; 
+                }
+            }
+        });
+
+        // Atualiza os '0 registros' no título da tabela
+        document.querySelectorAll('*').forEach(el => {
+            if (el.children.length === 0 && el.textContent.includes('registros')) {
+                if (el.textContent === '0 registros' || el.classList.contains('text-sm')) {
+                    if (el.parentElement && !el.parentElement.textContent.includes('Carregado')) {
+                        el.textContent = `${comparisonResults.length} registros`;
+                    }
+                }
+            }
+        });
 
         renderizarTabelaComparativo(comparisonResults);
         if(loader) loader.classList.add('hidden');
@@ -9375,15 +9397,13 @@ function processarComparativoRenovacao() {
     }, 500);
 }
 
-// 5. Renderização Correta do HTML
+// 6. Renderização da Tabela HTML
 function renderizarTabelaComparativo(resultados) {
     const tbody = document.getElementById('renewal-table-body');
-    const placeholder = document.getElementById('renewal-placeholder');
-    const wrapper = document.getElementById('renewal-table-wrapper');
-
     if (!tbody) return;
-    if (placeholder) placeholder.classList.add('hidden');
-    if (wrapper) wrapper.classList.remove('hidden');
+    
+    document.getElementById('renewal-placeholder')?.classList.add('hidden');
+    document.getElementById('renewal-table-wrapper')?.classList.remove('hidden');
 
     let html = '';
     resultados.forEach((r) => {
@@ -9391,32 +9411,31 @@ function renderizarTabelaComparativo(resultados) {
         if (r.status === 'renovado') {
             badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
             badgeText = '🔄 RENOVOU';
-            matchIcon = r.matchBy === 'DOC' ? '<span class="text-[10px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-bold border border-slate-700">DOC</span>' : '<span class="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded font-bold border border-slate-700">NOME</span>';
+            matchIcon = r.matchBy === 'DOC' ? 'DOC' : 'NOME';
         } else if (r.status === 'nao-renovado') {
             badgeClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
             badgeText = '❌ NÃO RENOVOU';
-            matchIcon = '<span class="text-slate-600">-</span>';
+            matchIcon = '-';
         } else {
             badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
             badgeText = '⭐ NOVO';
-            matchIcon = '<span class="text-slate-600">-</span>';
+            matchIcon = '-';
         }
 
         html += `
-            <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
-                <td class="p-3 text-slate-500 font-mono text-[10px]">${r.id}</td>
-                <td class="p-3 font-bold text-slate-200 text-xs truncate max-w-[220px]" title="${r.cliente}">${r.cliente}</td>
-                <td class="p-3 text-slate-400 font-mono text-[10px]">${r.documento}</td>
-                <td class="p-3 text-slate-500 text-[10px] truncate max-w-[150px]" title="${r.nomePrev}">${r.nomePrev}</td>
-                <td class="p-3 text-slate-400 text-[10px] truncate max-w-[150px]" title="${r.nomeCurr}">${r.nomeCurr}</td>
-                <td class="p-3 text-center">${matchIcon}</td>
-                <td class="p-3 text-right"><span class="px-2.5 py-1 rounded-md text-[9px] font-bold border ${badgeClass}">${badgeText}</span></td>
-            </tr>
+            
+                ${r.id}
+                ${r.cliente}
+                ${r.documento}
+                ${r.nomePrev}
+                ${r.nomeCurr}
+                ${matchIcon}
+                ${badgeText}
+            
         `;
     });
     tbody.innerHTML = html;
 }
-
 
     </script>
 </body>
