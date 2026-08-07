@@ -7821,304 +7821,205 @@ function handleRenewalUpload(event, type) {
     reader.readAsArrayBuffer(file);
 }
 
-// 3. CRUZAMENTO DE DADOS LIMPO
-function processRenewalComparison() {
-    if (!state.renewalComparison) return;
-
-    var prevData = state.renewalComparison.prevData || [];
-    var currentData = state.renewalComparison.currentData || [];
-    var results = [];
-
-    function getName(item) {
-        if (!item) return '';
-        if (item.name) return item.name;
-        if (item.raw) {
-            for (var k in item.raw) {
-                var kUpper = String(k).toUpperCase();
-                if (kUpper.includes('CLIENTE') || kUpper.includes('NOME') || kUpper.includes('RAZAO')) {
-                    return item.raw[k];
-                }
-            }
-        }
-        return '-';
-    }
-
-    function getDoc(item) {
-        if (!item) return '';
-        var d = item.doc || '';
-        if (!d && item.raw) {
-            for (var k in item.raw) {
-                var kUpper = String(k).toUpperCase();
-                if (kUpper.includes('CNPJ') || kUpper.includes('CPF') || kUpper.includes('DOC')) {
-                    d = item.raw[k];
-                    break;
-                }
-            }
-        }
-        return String(d || '').replace(/\D/g, '');
-    }
-
-    for (var i = 0; i < prevData.length; i++) {
-        var pItem = prevData[i];
-        var pName = getName(pItem);
-        var pDoc = getDoc(pItem);
-
-        var matchCurr = currentData.find(function(c) {
-            var cDoc = getDoc(c);
-            var cName = getName(c);
-            if (pDoc && cDoc && pDoc === cDoc) return true;
-            if (pName && cName && pName.toLowerCase() === cName.toLowerCase() && pName !== '-') return true;
-            return false;
-        });
-
-        if (matchCurr) {
-            results.push({
-                clientPrev: pName,
-                clientCurrent: getName(matchCurr),
-                doc: pDoc || getDoc(matchCurr),
-                namePrev: pName,
-                nameCurrent: getName(matchCurr),
-                matchType: (pDoc && getDoc(matchCurr) && pDoc === getDoc(matchCurr)) ? 'DOCUMENTO' : 'NOME',
-                status: 'RENOVOU'
-            });
-        } else {
-            results.push({
-                clientPrev: pName,
-                clientCurrent: '-',
-                doc: pDoc,
-                namePrev: pName,
-                nameCurrent: 'Não presente',
-                matchType: '-',
-                status: 'NÃO RENOVOU'
-            });
-        }
-    }
-
-    for (var j = 0; j < currentData.length; j++) {
-        var cItem = currentData[j];
-        var cName = getName(cItem);
-        var cDoc = getDoc(cItem);
-
-        var exists = prevData.some(function(p) {
-            var pDoc = getDoc(p);
-            var pName = getName(p);
-            if (cDoc && pDoc && cDoc === pDoc) return true;
-            if (cName && pName && cName.toLowerCase() === pName.toLowerCase() && cName !== '-') return true;
-            return false;
-        });
-
-        if (!exists) {
-            results.push({
-                clientPrev: '-',
-                clientCurrent: cName,
-                doc: cDoc,
-                namePrev: 'Não presente',
-                nameCurrent: cName,
-                matchType: '-',
-                status: 'NOVO'
-            });
-        }
-    }
-
-    state.renewalComparison.results = results;
+// 1. Funções de Limpeza para garantir Precisão Absoluta no Cálculo
+function sanitizeName(name) {
+    if (!name) return '';
+    return String(name)
+        .toLowerCase() // Tudo minúsculo
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove acentos (é vira e, ã vira a)
+        .replace(/[^a-z0-9\s]/g, '') // Remove caracteres especiais
+        .replace(/\s+/g, ' ') // Remove espaços duplos
+        .trim();
 }
 
-// 4. RENDERIZADOR DA TABELA
-function renderRenewalComparison() {
-    try {
-        var results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-        
-        var renovaram = 0, naoRenovaram = 0, novos = 0;
-        for (var r = 0; r < results.length; r++) {
-            if (results[r].status === 'RENOVOU') renovaram++;
-            else if (results[r].status === 'NÃO RENOVOU') naoRenovaram++;
-            else novos++;
-        }
+function sanitizeDoc(doc) {
+    if (!doc) return '';
+    return String(doc).replace(/\D/g, ''); // Deixa SOMENTE os números do CPF/CNPJ
+}
 
-        var totalPrev = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData.length : 0;
-        var totalCurrent = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData.length : 0;
-        var taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
+// 2. Lógica Principal de Processamento
+function processarComparativoRenovacao() {
+    const prev = state.renewalComparison.prevData || [];
+    const curr = state.renewalComparison.currentData || [];
 
-        var setVal = function(id, val) { 
-            var el = document.getElementById(id); 
-            if (el) el.innerText = val; 
-        };
+    if (prev.length === 0 || curr.length === 0) return;
 
-        setVal('renewal-val-prev', totalPrev);
-        setVal('renewal-val-current', totalCurrent);
-        setVal('renewal-val-renovaram', renovaram);
-        setVal('renewal-val-nao-renovaram', naoRenovaram);
-        setVal('renewal-val-taxa', taxa + '%');
-        setVal('renewal-val-novos', novos);
-        setVal('renewal-prev-count', totalPrev);
-        setVal('renewal-current-count', totalCurrent);
-        setVal('renewal-total-records', results.length + ' registros');
+    const loader = document.getElementById('renewal-processing-indicator');
+    if(loader) loader.classList.remove('hidden');
 
-        var tableBody = document.getElementById('renewal-table-body');
-        var tableWrapper = document.getElementById('renewal-table-wrapper');
-        var placeholder = document.getElementById('renewal-placeholder');
+    setTimeout(() => {
+        let renewedCount = 0;
+        let notRenewedCount = 0;
+        let newCount = 0;
 
-        if (results.length === 0) {
-            if (typeof renderEmptyComparison === 'function') renderEmptyComparison();
-            return;
-        }
+        const comparisonResults = [];
+        const matchedCurrentIndices = new Set();
 
-        if (placeholder) placeholder.classList.add('hidden');
-        if (tableWrapper) tableWrapper.classList.remove('hidden');
+        // Mapear Planilha Atual para busca rápida e precisa
+        const currByDoc = new Map();
+        const currByName = new Map();
 
-        var rowsHtml = '';
-        for (var z = 0; z < results.length; z++) {
-            var row = results[z];
-            var statusBadge = '';
-            if (row.status === 'RENOVOU') {
-                statusBadge = '🔄 RENOVOU';
-            } else if (row.status === 'NÃO RENOVOU') {
-                statusBadge = '❌ NÃO RENOVOU';
+        curr.forEach((cItem, index) => {
+            // Busca nas colunas mais comuns do Excel
+            const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || cItem.Nome || cItem.Cliente || '';
+            const cDocStr = cItem.documento || cItem.cnpj || cItem.cpf || cItem.doc || cItem.Documento || cItem.CNPJ || cItem.CPF || '';
+            
+            const sName = sanitizeName(cNameStr);
+            const sDoc = sanitizeDoc(cDocStr);
+
+            if (sDoc && sDoc.length >= 11) currByDoc.set(sDoc, index);
+            if (sName) currByName.set(sName, index);
+        });
+
+        // Comparar Planilha Anterior com a Atual
+        prev.forEach((pItem) => {
+            const pNameStr = pItem.nome || pItem.cliente || pItem['razão social'] || pItem.razao_social || pItem.Nome || pItem.Cliente || '';
+            const pDocStr = pItem.documento || pItem.cnpj || pItem.cpf || pItem.doc || pItem.Documento || pItem.CNPJ || pItem.CPF || '';
+            
+            const sName = sanitizeName(pNameStr);
+            const sDoc = sanitizeDoc(pDocStr);
+
+            let matchIndex = -1;
+            let matchType = '';
+
+            // TENTATIVA 1: Bater o Documento (Mais seguro)
+            if (sDoc && sDoc.length >= 11 && currByDoc.has(sDoc)) {
+                matchIndex = currByDoc.get(sDoc);
+                matchType = 'DOC';
+            } 
+            // TENTATIVA 2: Bater pelo Nome exato (Caso não tenha doc)
+            else if (sName && currByName.has(sName)) {
+                matchIndex = currByName.get(sName);
+                matchType = 'NOME';
+            }
+
+            if (matchIndex !== -1 && !matchedCurrentIndices.has(matchIndex)) {
+                // SUCESSO - Cliente Renovou
+                renewedCount++;
+                matchedCurrentIndices.add(matchIndex);
+                const cItem = curr[matchIndex];
+                const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || cItem.Nome || '';
+
+                comparisonResults.push({
+                    id: comparisonResults.length + 1,
+                    cliente: pNameStr || cNameStr || 'Desconhecido',
+                    documento: pDocStr || cItem.documento || sDoc || '-',
+                    nomePrev: pNameStr || '-',
+                    nomeCurr: cNameStr || '-',
+                    matchBy: matchType,
+                    status: 'renovado'
+                });
             } else {
-                statusBadge = '⭐ NOVO';
+                // FALHA - Cliente Não Renovou
+                notRenewedCount++;
+                comparisonResults.push({
+                    id: comparisonResults.length + 1,
+                    cliente: pNameStr || 'Desconhecido',
+                    documento: pDocStr || '-',
+                    nomePrev: pNameStr || '-',
+                    nomeCurr: 'Não Localizado',
+                    matchBy: '-',
+                    status: 'nao-renovado'
+                });
             }
+        });
 
-            var matchBadge = '-';
-            if (row.matchType && row.matchType !== '-') {
-                matchBadge = '📇 ' + row.matchType + '';
+        // 3. Identificar Novos (Quem está na Atual, mas não estava na Anterior)
+        curr.forEach((cItem, index) => {
+            if (!matchedCurrentIndices.has(index)) {
+                newCount++;
+                const cNameStr = cItem.nome || cItem.cliente || cItem['razão social'] || cItem.razao_social || cItem.Nome || 'Desconhecido';
+                const cDocStr = cItem.documento || cItem.cnpj || cItem.cpf || cItem.doc || cItem.Documento || '-';
+
+                comparisonResults.push({
+                    id: comparisonResults.length + 1,
+                    cliente: cNameStr,
+                    documento: cDocStr,
+                    nomePrev: 'Novo Cliente (Não estava na base)',
+                    nomeCurr: cNameStr,
+                    matchBy: '-',
+                    status: 'novo'
+                });
             }
+        });
 
-            var nomeExibicao = (row.clientPrev && row.clientPrev !== 'Não presente') ? row.clientPrev : (row.clientCurrent || '-');
-            var docExibicao = row.doc || '-';
+        // 4. Atualizar os Cards no HTML
+        const updateEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        
+        updateEl('renewal-stat-total-prev', prev.length);
+        updateEl('renewal-stat-total-current', curr.length);
+        updateEl('renewal-stat-renewed', renewedCount);
+        updateEl('renewal-stat-not-renewed', notRenewedCount);
+        
+        const taxa = prev.length > 0 ? Math.round((renewedCount / prev.length) * 100) : 0;
+        updateEl('renewal-stat-rate', taxa + '%');
+        updateEl('renewal-stat-new', newCount);
 
-            rowsHtml += '' +
-                '' + (z + 1) + '' +
-                '' + nomeExibicao + '' +
-                '' + docExibicao + '' +
-                '' + (row.namePrev || '-') + '' +
-                '' + (row.nameCurrent || '-') + '' +
-                '' + matchBadge + '' +
-                '' + statusBadge + '' +
-                '';
-        }
+        updateEl('renewal-comparison-count', `${comparisonResults.length} registros`);
 
-        if (tableBody) {
-            tableBody.innerHTML = rowsHtml;
-        }
+        // Renderiza a tabela bonita
+        renderizarTabelaComparativo(comparisonResults);
 
-    } catch (erro) {
-        console.error("Erro ao renderizar renovações:", erro);
-    }
+        if(loader) loader.classList.add('hidden');
+        
+    }, 500);
 }
-            function generateRenewalReport() {
-                const matched = state.renewalComparison.matched;
-                if (!matched || matched.length === 0) {
-                    showToast('Carregue as duas planilhas primeiro.', 'error');
-                    return;
-                }
 
-                const section = document.getElementById('renewal-report-section');
-                const content = document.getElementById('renewal-report-content');
-                
-                section.classList.remove('hidden');
+// 3. Renderização Correta do HTML (Corrige o "Blocão de Texto")
+function renderizarTabelaComparativo(resultados) {
+    const tbody = document.getElementById('renewal-table-body');
+    const placeholder = document.getElementById('renewal-placeholder');
+    const wrapper = document.getElementById('renewal-table-wrapper');
 
-                const renewed = matched.filter(m => m.status === 'renewed');
-                const notRenewed = matched.filter(m => m.status === 'not_renewed');
-                const newClients = matched.filter(m => m.status === 'new');
+    if (!tbody) return;
 
-                let html = `
-                    <div class="mb-4 grid grid-cols-3 gap-3">
-                        <div class="bg-emerald-500/10 p-3 rounded-xl text-center border border-emerald-500/20">
-                            <span class="text-2xl font-black text-emerald-500">${renewed.length}</span>
-                            <p class="text-[9px] text-slate-400">🔄 Renovaram</p>
-                        </div>
-                        <div class="bg-rose-500/10 p-3 rounded-xl text-center border border-rose-500/20">
-                            <span class="text-2xl font-black text-rose-500">${notRenewed.length}</span>
-                            <p class="text-[9px] text-slate-400">❌ Não Renovaram</p>
-                        </div>
-                        <div class="bg-blue-500/10 p-3 rounded-xl text-center border border-blue-500/20">
-                            <span class="text-2xl font-black text-blue-500">${newClients.length}</span>
-                            <p class="text-[9px] text-slate-400">⭐ Novos</p>
-                        </div>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Cliente</th>
-                                    <th>CNPJ</th>
-                                    <th>Nome Ano Anterior</th>
-                                    <th>Nome Ano Atual</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
+    if (placeholder) placeholder.classList.add('hidden');
+    if (wrapper) wrapper.classList.remove('hidden');
 
-                renewed.forEach(item => {
-                    const docFormatted = item.doc && item.doc.length === 14 ? 
-                        item.doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') :
-                        item.doc || '-';
-                    html += `
-                        <tr class="border-b border-emerald-500/10">
-                            <td class="font-medium text-slate-200">${escapeHTML(item.name)}</td>
-                            <td class="font-mono text-slate-300 text-[10px]">${escapeHTML(docFormatted)}</td>
-                            <td class="text-slate-400">${escapeHTML(item.prevName || '-')}</td>
-                            <td class="text-emerald-400 font-medium">${escapeHTML(item.currentName || '-')}</td>
-                            <td><span class="renewal-badge renewed">🔄 Renovou</span></td>
-                        </tr>
-                    `;
-                });
+    // Aqui usamos innerHTML para gerar as colunas corretamente!
+    let html = '';
+    resultados.forEach((r) => {
+        let badgeClass = '';
+        let badgeText = '';
+        let matchIcon = '';
+        
+        // Cores baseadas no status
+        if (r.status === 'renovado') {
+            badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+            badgeText = '🔄 RENOVOU';
+            matchIcon = r.matchBy === 'DOC' 
+                ? '<span class="text-[10px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded font-bold border border-slate-700">DOC</span>' 
+                : '<span class="text-[10px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded font-bold border border-slate-700">NOME</span>';
+        } else if (r.status === 'nao-renovado') {
+            badgeClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+            badgeText = '❌ NÃO RENOVOU';
+            matchIcon = '<span class="text-slate-600">-</span>';
+        } else {
+            badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
+            badgeText = '⭐ NOVO';
+            matchIcon = '<span class="text-slate-600">-</span>';
+        }
 
-                notRenewed.forEach(item => {
-                    const docFormatted = item.doc && item.doc.length === 14 ? 
-                        item.doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') :
-                        item.doc || '-';
-                    html += `
-                        <tr class="border-b border-rose-500/10">
-                            <td class="font-medium text-rose-400">${escapeHTML(item.name)}</td>
-                            <td class="font-mono text-slate-300 text-[10px]">${escapeHTML(docFormatted)}</td>
-                            <td class="text-rose-400 font-medium">${escapeHTML(item.prevName || '-')}</td>
-                            <td class="text-slate-500 italic">Não presente</td>
-                            <td><span class="renewal-badge not-renewed">❌ Não Renovou</span></td>
-                        </tr>
-                    `;
-                });
+        // Estrutura HTML correta (<tr> e <td>)
+        html += `
+            <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition-colors">
+                <td class="p-3 text-slate-500 font-mono text-[10px]">${r.id}</td>
+                <td class="p-3 font-bold text-slate-200 text-xs truncate max-w-[220px]" title="${r.cliente}">${r.cliente}</td>
+                <td class="p-3 text-slate-400 font-mono text-[10px]">${r.documento}</td>
+                <td class="p-3 text-slate-500 text-[10px] truncate max-w-[150px]" title="${r.nomePrev}">${r.nomePrev}</td>
+                <td class="p-3 text-slate-400 text-[10px] truncate max-w-[150px]" title="${r.nomeCurr}">${r.nomeCurr}</td>
+                <td class="p-3 text-center">${matchIcon}</td>
+                <td class="p-3 text-right">
+                    <span class="px-2.5 py-1 rounded-md text-[9px] font-bold border ${badgeClass}">
+                        ${badgeText}
+                    </span>
+                </td>
+            </tr>
+        `;
+    });
 
-                newClients.forEach(item => {
-                    const docFormatted = item.doc && item.doc.length === 14 ? 
-                        item.doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') :
-                        item.doc || '-';
-                    html += `
-                        <tr class="border-b border-blue-500/10">
-                            <td class="font-medium text-slate-200">${escapeHTML(item.name)}</td>
-                            <td class="font-mono text-slate-300 text-[10px]">${escapeHTML(docFormatted)}</td>
-                            <td class="text-slate-500 italic">Não presente</td>
-                            <td class="text-blue-400 font-medium">${escapeHTML(item.currentName || '-')}</td>
-                            <td><span class="renewal-badge new">⭐ Novo</span></td>
-                        </tr>
-                    `;
-                });
-
-                html += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-
-                content.innerHTML = html;
-                state.renewalComparison.reportData = { renewed, notRenewed, newClients };
-                document.getElementById('main-scroll-area').scrollTop = document.getElementById('renewal-report-section').offsetTop - 100;
-                showToast(`Relatório gerado: ${renewed.length} renovações, ${notRenewed.length} não renovaram, ${newClients.length} novos.`);
-            }
-
-            function closeRenewalReport() {
-                document.getElementById('renewal-report-section').classList.add('hidden');
-            }
-
-            function exportRenewalReportPDF() {
-                const section = document.getElementById('renewal-report-section');
-                if (section.classList.contains('hidden')) {
-                    showToast('Gere o relatório primeiro.', 'error');
-                    return;
-                }
-                exportToPDFFromElement('renewal-report-content', 'relatorio_renovacoes.pdf');
-            }
+    tbody.innerHTML = html; // Injeta os elementos HTML de verdade na tabela
+}
 
             function exportRenewalReportExcel() {
                 const data = state.renewalComparison.reportData;
