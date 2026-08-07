@@ -3135,16 +3135,23 @@ function subscribeSupabaseRealtime() {
                 const newMsg = payload.new;
                 if (!state.currentUser || !newMsg) return;
 
-                const myId = String(state.currentUser.id);
-                const senderId = String(newMsg.sender_id);
-                const receiverId = String(newMsg.receiver_id);
+                // Função interna para remover qualquer 'u-' ou espaço do ID antes de comparar
+                const sanitize = id => String(id || '').replace(/^u-/, '').trim();
 
+                const myId = sanitize(state.currentUser.id);
+                const senderId = sanitize(newMsg.sender_id);
+                const receiverId = sanitize(newMsg.receiver_id);
+
+                console.log(`🔍 Checando permissão de exibição: Eu [${myId}] | De [${senderId}] | Para [${receiverId}]`);
+
+                // Verifica se a mensagem envolve o usuário atual
                 if (receiverId === myId || senderId === myId) {
                     const convKey = [senderId, receiverId].sort().join('_');
 
                     if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
                     if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
 
+                    // Evita duplicados e insere na conversa
                     if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
                         state.chat.messages[convKey].push({
                             id: newMsg.id,
@@ -3156,14 +3163,20 @@ function subscribeSupabaseRealtime() {
                         });
                     }
 
-                    if (receiverId === myId && state.chat.activeConversation !== convKey) {
-                        state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
-                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
-                            el.classList.add('chat-notify-ping');
-                        });
-                        if (typeof showToast === 'function') showToast("Nova mensagem no chat!", "info");
+                    // Notificação de mensagem não lida caso a conversa não esteja focada
+                    if (receiverId === myId) {
+                        const currentActiveKey = state.chat.activeConversation ? state.chat.activeConversation.split('_').map(sanitize).sort().join('_') : null;
+                        
+                        if (currentActiveKey !== convKey) {
+                            state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
+                            document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => {
+                                el.classList.add('chat-notify-ping');
+                            });
+                            if (typeof showToast === 'function') showToast("Nova mensagem recebida no chat!", "info");
+                        }
                     }
 
+                    // Renderiza a interface
                     if (typeof renderChatMessages === 'function') renderChatMessages();
                     if (typeof renderChatContacts === 'function') renderChatContacts();
                     if (typeof renderChatContactsSidebar === 'function') renderChatContactsSidebar();
