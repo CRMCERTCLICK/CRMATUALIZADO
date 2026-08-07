@@ -9343,22 +9343,31 @@ function processarComparativoRenovacao() {
 }
 
 function renderizarTabelaFinal(resultados) {
-    const tbody = document.getElementById('renewal-table-body');
-    const wrapper = document.getElementById('renewal-table-wrapper');
+    const wrapper = document.getElementById('renewal-table-wrapper') || document.getElementById('renewal-table-body')?.parentElement;
     const placeholder = document.getElementById('renewal-placeholder');
 
     if (placeholder) placeholder.classList.add('hidden');
-    if (wrapper) wrapper.classList.remove('hidden');
+    if (!wrapper) return;
 
-    if (!tbody) return;
+    wrapper.classList.remove('hidden');
 
-    let html = '';
+    // Constrói a estrutura completa da tabela via script
+    let html = `
+        
+            
+    `;
+
     resultados.forEach((r) => {
-        let badgeClass = ''; let badgeText = ''; let matchIcon = '';
+        let badgeClass = ''; 
+        let badgeText = ''; 
+        let matchIcon = '';
+
         if (r.status === 'renovado') {
             badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
             badgeText = '🔄 RENOVOU';
-            matchIcon = r.matchBy === 'DOC' ? 'DOC' : 'NOME';
+            matchIcon = r.matchBy === 'DOC' 
+                ? 'DOC' 
+                : 'NOME';
         } else if (r.status === 'nao-renovado') {
             badgeClass = 'bg-rose-500/10 text-rose-400 border-rose-500/30';
             badgeText = '❌ NÃO RENOVOU';
@@ -9371,6 +9380,23 @@ function renderizarTabelaFinal(resultados) {
 
         html += `
             
+        `;
+    });
+
+    html += `
+                
+                
+                    
+                        #
+                        CLIENTE
+                        DOCUMENTO
+                        NOME ANO ANTERIOR
+                        NOME ANO ATUAL
+                        MATCH
+                        STATUS
+                    
+                
+                
                 ${r.id}
                 ${r.cliente}
                 ${r.documento}
@@ -9379,10 +9405,11 @@ function renderizarTabelaFinal(resultados) {
                 ${matchIcon}
                 ${badgeText}
             
-        `;
-    });
+            
+        
+    `;
 
-    tbody.innerHTML = html;
+    wrapper.innerHTML = html;
 }
 
     </script>
