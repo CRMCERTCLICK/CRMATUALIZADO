@@ -3024,55 +3024,55 @@ window.loadState = async function loadState() {
                 showToast("Sessão finalizada.");
             }
 
-// Crie esta variável logo ANTES da função
+
 let realtimeChannel = null;
 
 function subscribeSupabaseRealtime() {
     const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
     if (!db || typeof db.channel !== 'function') return;
 
-    // Se já estiver conectado, ignora para não dar aquele erro vermelho no console
     if (realtimeChannel) return;
 
-    // Criamos um único canal para escutar o CRM inteiro
     realtimeChannel = db.channel('crm-realtime-sync')
-      // 1. Escuta exclusões na tabela CLIENTS (Leads)
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'clients' },
-        (payload) => {
-            console.log("Cliente deletado remotamente:", payload);
+      // 1. Escuta CLIENTS
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'clients' }, (payload) => {
             const deletedId = payload.old.id;
-            
             if (state.clients.some(c => c.id === deletedId)) {
                 state.clients = state.clients.filter(c => c.id !== deletedId);
                 refreshAllUI();
-                showToast("Um lead foi removido remotamente.", "info");
             }
-        }
-      )
-      // 2. Escuta exclusões na tabela ACCOUNTANTS (Parceiros)
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'accountants' },
-        (payload) => {
-            console.log("Parceiro deletado remotamente:", payload);
+      })
+      // 2. Escuta ACCOUNTANTS (Parceiros)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'accountants' }, (payload) => {
             const deletedId = payload.old.id;
-            
             if (state.accountants.some(a => a.id === deletedId)) {
-                // Remove o parceiro da tela local
                 state.accountants = state.accountants.filter(a => a.id !== deletedId);
-                
-                // Remove a referência desse parceiro dos clientes que o possuíam
-                state.clients.forEach(c => { 
-                    if (c.accountantId === deletedId) c.accountantId = ''; 
-                });
-                
+                state.clients.forEach(c => { if (c.accountantId === deletedId) c.accountantId = ''; });
                 refreshAllUI();
-                showToast("Um parceiro foi removido remotamente.", "info");
             }
-        }
-      )
+      })
+      // 3. Escuta USERS (Usuários) - NOVO BLOCO
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'users' }, (payload) => {
+            const deletedId = payload.old.id;
+            if (state.users.some(u => u.id === deletedId)) {
+                state.users = state.users.filter(u => u.id !== deletedId);
+                refreshAllUI();
+                showToast("Um usuário foi removido pelo administrador.", "info");
+            }
+      })
+      // 4. Escuta UPDATE em USERS (Mudança de Permissões) - NOVO BLOCO
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, (payload) => {
+            const updatedUser = payload.new;
+            const index = state.users.findIndex(u => u.id === updatedUser.id);
+            if (index !== -1) {
+                state.users[index] = updatedUser;
+                // Se o usuário logado teve a permissão alterada, atualiza a sessão dele na hora
+                if (state.currentUser && state.currentUser.id === updatedUser.id) {
+                    state.currentUser = updatedUser;
+                }
+                refreshAllUI();
+            }
+      })
       .subscribe();
 }
 
@@ -5843,83 +5843,97 @@ async function fetchReceitaFederalBulk(data, type) {
             function closeUserModal() { document.getElementById('user-modal').classList.add('hidden');
                 document.getElementById('user-modal').classList.remove('flex'); }
 
-       async function saveUser(e) {
-    if (e && e.preventDefault) e.preventDefault();
+  window.saveUser = async function(e) {
+    if (e) e.preventDefault();
+    
+    const id = document.getElementById('user-id').value;
+    const name = document.getElementById('user-name').value.trim();
+    const username = document.getElementById('user-username').value.trim().toLowerCase();
+    const password = document.getElementById('user-password').value;
+    const role = document.getElementById('user-role').value;
 
-    // 1. Obtém o cliente do Supabase
-    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
-    if (!db || typeof db.from !== 'function') {
-        alert("Erro: Conexão com o Supabase não encontrada.");
+    if (!name || !username || !password) {
+        showToast("Preencha todos os campos obrigatórios!", "error");
         return false;
     }
 
-    // 2. Coleta flexível buscando nos IDs de REGISTRO e de MODAL DE USUÁRIO
-    const idInput = document.getElementById('user-id');
-    const nameInput = document.getElementById('register-name') || document.getElementById('user-name');
-    const usernameInput = document.getElementById('register-username-input') || document.getElementById('user-username');
-    const passwordInput = document.getElementById('register-password') || document.getElementById('user-password');
-    const roleSelect = document.getElementById('register-role') || document.getElementById('user-role');
-
-    const id = idInput ? idInput.value : '';
-    const name = nameInput ? nameInput.value.trim() : '';
-    const username = usernameInput ? usernameInput.value.trim().toLowerCase() : '';
-    const password = passwordInput ? passwordInput.value.trim() : '';
-    const role = roleSelect ? roleSelect.value : 'agent';
-
-    console.log("Dados capturados com sucesso:", { name, username, password, role });
-
-    if (!name || !username || (!id && !password)) {
-        alert("Por favor, preencha o Nome, Usuário e Senha.");
-        return false;
-    }
-
-    const payload = {
+    const userData = {
+        id: id || 'u-' + Date.now(),
         name: name,
         username: username,
+        password: password,
         role: role
     };
 
-    if (password) payload.password = password;
-
-    try {
-        let result;
-        if (id) {
-            result = await db.from('users').update(payload).eq('id', id);
-        } else {
-            payload.id = 'u-' + Date.now();
-            result = await db.from('users').insert([payload]);
-        }
-
-        if (result.error) {
-            console.error("Erro do Supabase ao salvar usuário:", result.error);
-            alert("Erro do Supabase: " + result.error.message);
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    
+    if (db && typeof db.from === 'function') {
+        try {
+            // Salva ou atualiza (upsert) o usuário no Supabase
+            const { error } = await db.from('users').upsert([userData]);
+            if (error) {
+                console.error("Erro no Supabase:", error);
+                showToast("Erro ao salvar no banco: " + error.message, "error");
+                return false;
+            }
+        } catch (err) {
+            console.error("Erro de conexão:", err);
+            showToast("Erro de conexão ao salvar usuário.", "error");
             return false;
         }
-
-        console.log("USUÁRIO CADASTRADO NO SUPABASE COM SUCESSO!", result);
-        alert("Usuário cadastrado com sucesso no Supabase!");
-
-        if (typeof window.loadState === 'function') await window.loadState();
-        if (typeof closeUserModal === 'function') closeUserModal();
-        if (typeof refreshAllUI === 'function') refreshAllUI();
-
-    } catch (err) {
-        console.error("Erro inesperado:", err);
-        alert("Erro fatal: " + err.message);
     }
 
+    // Atualiza localmente
+    if (id) {
+        const i = state.users.findIndex(x => x.id === id);
+        if (i !== -1) state.users[i] = userData;
+        // Se estiver editando a si mesmo, atualiza a sessão atual
+        if (state.currentUser && state.currentUser.id === id) {
+            state.currentUser = userData;
+        }
+    } else {
+        state.users.push(userData);
+    }
+
+    saveState();
+    closeUserModal();
+    refreshAllUI();
+    showToast("Usuário salvo com sucesso!");
     return false;
+};
+        
+         window.deleteUser = async function(id) {
+    // Trava de segurança para não apagar a si mesmo ou o desenvolvedor master
+    if (id === 'usr_dev_master' || (state.currentUser && state.currentUser.id === id)) {
+        showToast("Você não pode excluir o usuário master ou a si mesmo.", "error");
+        return;
+    }
 
+    openPremiumConfirm("Remover Usuário", "Tem certeza que deseja excluir este usuário do sistema e do Supabase?", async () => {
+        const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+        
+        if (db && typeof db.from === 'function') {
+            try {
+                // Deleta no Supabase
+                const { error } = await db.from('users').delete().eq('id', id);
+                if (error) {
+                    console.error("Erro ao deletar usuário:", error);
+                    showToast("Erro ao excluir no banco: " + error.message, "error");
+                    return;
+                }
+            } catch (err) {
+                showToast("Erro de conexão ao excluir.", "error");
+                return;
             }
+        }
 
-            function deleteUser(id) {
-                openPremiumConfirm("Remover Acesso", "Excluir este usuário do sistema?", () => {
-                    state.users = state.users.filter(u => u.id !== id);
-                    saveState();
-                    refreshAllUI();
-                    showToast("Usuário removido.");
-                });
-            }
+        // Remove da tela local
+        state.users = state.users.filter(u => u.id !== id);
+        saveState();
+        refreshAllUI();
+        showToast("Usuário removido com sucesso.");
+    });
+};
 
             // ============================================================
             //  DASHBOARD COUPON
