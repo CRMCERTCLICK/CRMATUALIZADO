@@ -1561,155 +1561,120 @@
                 </section>
 
                 <!-- RENOVAÇÕES ANUAIS - COMPARATIVO CORRIGIDO -->
-                <section id="section-renewal-comparison" class="hidden space-y-4 section-transition">
-                    <div class="flex justify-between items-center gap-4 flex-wrap no-print">
-                        <h3 class="font-bold text-sm text-slate-400 uppercase tracking-wider">
-                            <i class="fas fa-calendar-alt text-amber-500 mr-2"></i> Comparativo de Renovações Anuais
-                        </h3>
-                        <div class="flex gap-2 flex-wrap">
-                            <button onclick="exportRenewalComparison()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all">
-                                <i class="fas fa-file-excel"></i> Exportar
-                            </button>
-                            <button onclick="clearRenewalComparison()" class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-lg transition-all border border-rose-500/20">
-                                <i class="fas fa-trash"></i> Limpar Dados
-                            </button>
-                            <button onclick="generateRenewalReport()" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-all">
-                                <i class="fas fa-file-pdf"></i> Relatório Renovações
-                            </button>
-                        </div>
-                    </div>
-                    <div id="renewal-processing-indicator" class="renewal-processing-indicator hidden">
-                        <div class="flex items-center justify-center gap-3">
-                            <span class="spinner"></span>
-                            <span class="text-sm text-amber-400 font-medium">Processando comparação de renovações...</span>
-                        </div>
-                        <div class="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
-                            <div id="renewal-progress-bar" class="bg-amber-500 h-1.5 rounded-full transition-all" style="width: 0%"></div>
-                        </div>
-                    </div>
+               <section id="section-renewal-comparison" class="hidden space-y-4 section-transition">
+    <!-- CABEÇALHO COM BOTÕES DE AÇÃO -->
+    <div class="flex justify-between items-center gap-4 flex-wrap no-print">
+        <h3 class="font-bold text-sm text-slate-400 uppercase tracking-wider">
+            <i class="fas fa-calendar-alt text-amber-500 mr-2"></i> Comparativo de Renovações Anuais
+        </h3>
+        <div class="flex gap-2 flex-wrap">
+            <button onclick="exportRenewalComparison()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+                <i class="fas fa-file-excel"></i> Exportar
+            </button>
+            <button onclick="clearRenewalComparison()" class="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-rose-500/20">
+                <i class="fas fa-trash"></i> Limpar Dados
+            </button>
+            <button onclick="generateRenewalReport()" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+                <i class="fas fa-file-pdf"></i> Relatório Renovações
+            </button>
+        </div>
+    </div>
 
-                    <!-- Resumo Estatístico - Corrigido sem INSS/CSLL/IR/PIS/COFINS -->
-                    <div class="renewal-summary-stats" id="renewal-summary-stats">
-                        <div class="stat-card">
-                            <div class="stat-number green" id="renewal-stat-total-prev">0</div>
-                            <div class="stat-label">📋 Ano Anterior</div>
-                            <div class="stat-sub">Total de clientes na base</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number blue" id="renewal-stat-total-current">0</div>
-                            <div class="stat-label">📋 Ano Atual</div>
-                            <div class="stat-sub">Total de clientes ativos</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number green" id="renewal-stat-renewed">0</div>
-                            <div class="stat-label">🔄 Renovaram</div>
-                            <div class="stat-sub">Clientes que permaneceram</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number rose" id="renewal-stat-not-renewed">0</div>
-                            <div class="stat-label">❌ Não Renovaram</div>
-                            <div class="stat-sub">Clientes perdidos</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number amber" id="renewal-stat-rate">0%</div>
-                            <div class="stat-label">📊 Taxa de Renovação</div>
-                            <div class="stat-sub">% de clientes que renovaram</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number" style="color:#8b5cf6" id="renewal-stat-new">0</div>
-                            <div class="stat-label">⭐ Novos</div>
-                            <div class="stat-sub">Clientes que entraram no ano atual</div>
-                        </div>
-                    </div>
+    <!-- CARDS DAS MÉTRICAS -->
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="glass-card p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+            <p class="text-xs text-slate-400 font-medium uppercase">ANO ANTERIOR</p>
+            <h3 id="renewal-val-prev" class="text-2xl font-bold text-white mt-1">0</h3>
+        </div>
+        <div class="glass-card p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+            <p class="text-xs text-slate-400 font-medium uppercase">ANO ATUAL</p>
+            <h3 id="renewal-val-current" class="text-2xl font-bold text-white mt-1">0</h3>
+        </div>
+        <div class="glass-card p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+            <p class="text-xs text-slate-400 font-medium uppercase">RENOVARAM</p>
+            <h3 id="renewal-val-renovaram" class="text-2xl font-bold text-emerald-400 mt-1">0</h3>
+        </div>
+        <div class="glass-card p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+            <p class="text-xs text-slate-400 font-medium uppercase">NÃO RENOVARAM</p>
+            <h3 id="renewal-val-nao-renovaram" class="text-2xl font-bold text-rose-400 mt-1">0</h3>
+        </div>
+        <div class="glass-card p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+            <p class="text-xs text-slate-400 font-medium uppercase">TAXA DE RENOVAÇÃO</p>
+            <h3 id="renewal-val-taxa" class="text-2xl font-bold text-brand-400 mt-1">0%</h3>
+        </div>
+        <div class="glass-card p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+            <p class="text-xs text-slate-400 font-medium uppercase">NOVOS</p>
+            <h3 id="renewal-val-novos" class="text-2xl font-bold text-amber-400 mt-1">0</h3>
+        </div>
+    </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="glass-card p-5 rounded-2xl border border-slate-800 shadow-sm">
-                            <h4 class="font-bold text-xs text-slate-400 uppercase tracking-wider mb-3">
-                                <i class="fas fa-file-upload text-blue-400 mr-1"></i> Planilha do Ano Anterior
-                            </h4>
-                            <div class="renewal-drop-zone" id="drop-zone-prev">
-                                <div class="flex flex-col items-center gap-3">
-                                    <div class="icon"><i class="fas fa-cloud-upload-alt"></i></div>
-                                    <div>
-                                        <p class="text-sm font-medium text-slate-300">Arraste ou clique para enviar</p>
-                                        <p class="text-xs text-slate-500 mt-1">Base de clientes do ano anterior</p>
-                                    </div>
-                                    <input type="file" id="renewal-prev-file" onchange="handleRenewalUpload(event, 'prev')" accept=".xlsx, .xls, .csv" class="block w-full max-w-xs text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-500/10 text-blue-400 hover:file:bg-blue-500/20 cursor-pointer mx-auto">
-                                </div>
-                            </div>
-                            <div id="renewal-prev-stats" class="mt-3 hidden">
-                                <div class="flex justify-between text-xs text-slate-400">
-                                    <span>Registros: <strong id="renewal-prev-count" class="text-slate-200">0</strong></span>
-                                    <span class="text-emerald-500" id="renewal-prev-status">✅ Carregado</span>
-                                </div>
-                            </div>
-                            <button onclick="fetchReceitaFederalForPrev()" id="rf-prev-btn" class="rf-search-btn mt-2 w-full justify-center">
-                                <i class="fas fa-search"></i> Buscar Nomes na Receita Federal
-                            </button>
-                            <div id="rf-prev-progress" class="hidden text-xs text-slate-400 mt-2"></div>
-                        </div>
-                        <div class="glass-card p-5 rounded-2xl border border-slate-800 shadow-sm">
-                            <h4 class="font-bold text-xs text-slate-400 uppercase tracking-wider mb-3">
-                                <i class="fas fa-file-upload text-brand-400 mr-1"></i> Planilha do Ano Atual
-                            </h4>
-                            <div class="renewal-drop-zone" id="drop-zone-current">
-                                <div class="flex flex-col items-center gap-3">
-                                    <div class="icon"><i class="fas fa-cloud-upload-alt"></i></div>
-                                    <div>
-                                        <p class="text-sm font-medium text-slate-300">Arraste ou clique para enviar</p>
-                                        <p class="text-xs text-slate-500 mt-1">Clientes do ano atual</p>
-                                    </div>
-                                    <input type="file" id="renewal-current-file" onchange="handleRenewalUpload(event, 'current')" accept=".xlsx, .xls, .csv" class="block w-full max-w-xs text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-brand-500/10 text-brand-400 hover:file:bg-brand-500/20 cursor-pointer mx-auto">
-                                </div>
-                            </div>
-                            <div id="renewal-current-stats" class="mt-3 hidden">
-                                <div class="flex justify-between text-xs text-slate-400">
-                                    <span>Registros: <strong id="renewal-current-count" class="text-slate-200">0</strong></span>
-                                    <span class="text-emerald-500" id="renewal-current-status">✅ Carregado</span>
-                                </div>
-                            </div>
-                            <button onclick="fetchReceitaFederalForCurrent()" id="rf-current-btn" class="rf-search-btn mt-2 w-full justify-center">
-                                <i class="fas fa-search"></i> Buscar Nomes na Receita Federal
-                            </button>
-                            <div id="rf-current-progress" class="hidden text-xs text-slate-400 mt-2"></div>
-                        </div>
-                    </div>
+    <!-- ÁREA DE UPLOAD -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Card Ano Anterior -->
+        <div class="glass-card p-6 rounded-xl border border-slate-800 bg-slate-900/50">
+            <h4 class="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">📄 PLANILHA DO ANO ANTERIOR</h4>
+            <div class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center hover:border-brand-500 transition cursor-pointer" onclick="document.getElementById('renewal-prev-file').click()">
+                <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
+                <p class="text-sm text-slate-300 font-medium">Arraste ou clique para enviar</p>
+                <p class="text-xs text-slate-500 mt-1">Base de clientes do ano anterior</p>
+                <input type="file" id="renewal-prev-file" accept=".xlsx, .xls" class="hidden" onchange="handleRenewalUpload(event, 'prev')">
+            </div>
+            <div class="mt-4 flex items-center justify-between">
+                <span class="text-xs text-slate-400">Registros: <strong id="renewal-prev-count" class="text-white">0</strong></span>
+                <span id="renewal-prev-status" class="text-xs text-slate-500">Pendente</span>
+            </div>
+            <button id="rf-prev-btn" onclick="fetchReceitaFederalBulk(state.renewalComparison.prevData, 'prev')" class="mt-3 w-full py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded-lg transition border border-slate-700 flex items-center justify-center gap-2">🔍 Buscar Nomes na Receita Federal</button>
+            <p id="rf-prev-progress" class="text-xs text-slate-400 mt-2 hidden"></p>
+        </div>
 
-                    <div class="glass-card rounded-xl border border-slate-800 shadow-sm overflow-hidden">
-                        <div class="p-3 border-b border-slate-800 flex justify-between items-center">
-                            <h4 class="font-bold text-xs text-slate-400 uppercase tracking-wider">
-                                <i class="fas fa-list text-brand-500 mr-1"></i> Comparativo por Cliente
-                            </h4>
-                            <span class="text-[10px] text-slate-500" id="renewal-comparison-count">0 registros</span>
-                        </div>
-                        <div class="renewal-comparison-table" id="renewal-comparison-container">
-                            <div class="text-center text-slate-500 py-8">
-                                <i class="fas fa-upload text-3xl text-slate-700 mb-3 block"></i>
-                                <p class="text-sm font-medium">Carregue as duas planilhas para visualizar o comparativo.</p>
-                                <p class="text-xs text-slate-600 mt-1">O sistema buscará pelo nome do cliente.</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="renewal-report-section" class="hidden glass-card p-5 rounded-2xl border border-slate-800 shadow-sm">
-                        <div class="flex justify-between items-center mb-4">
-                            <h4 class="font-bold text-xs text-slate-400 uppercase tracking-wider">
-                                <i class="fas fa-file-alt text-brand-500 mr-1"></i> Relatório de Renovações
-                            </h4>
-                            <button onclick="closeRenewalReport()" class="text-slate-400 hover:text-slate-200">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <div id="renewal-report-content" class="renewal-report-preview"></div>
-                        <div class="mt-3 flex gap-2">
-                            <button onclick="exportRenewalReportPDF()" class="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg transition-all">
-                                <i class="fas fa-file-pdf"></i> Exportar PDF
-                            </button>
-                            <button onclick="exportRenewalReportExcel()" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-all">
-                                <i class="fas fa-file-excel"></i> Exportar Excel
-                            </button>
-                        </div>
-                    </div>
-                </section>
+        <!-- Card Ano Atual -->
+        <div class="glass-card p-6 rounded-xl border border-slate-800 bg-slate-900/50">
+            <h4 class="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">📄 PLANILHA DO ANO ATUAL</h4>
+            <div class="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center hover:border-brand-500 transition cursor-pointer" onclick="document.getElementById('renewal-current-file').click()">
+                <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
+                <p class="text-sm text-slate-300 font-medium">Arraste ou clique para enviar</p>
+                <p class="text-xs text-slate-500 mt-1">Clientes do ano atual</p>
+                <input type="file" id="renewal-current-file" accept=".xlsx, .xls" class="hidden" onchange="handleRenewalUpload(event, 'current')">
+            </div>
+            <div class="mt-4 flex items-center justify-between">
+                <span class="text-xs text-slate-400">Registros: <strong id="renewal-current-count" class="text-white">0</strong></span>
+                <span id="renewal-current-status" class="text-xs text-slate-500">Pendente</span>
+            </div>
+            <button id="rf-current-btn" onclick="fetchReceitaFederalBulk(state.renewalComparison.currentData, 'current')" class="mt-3 w-full py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 rounded-lg transition border border-slate-700 flex items-center justify-center gap-2">🔍 Buscar Nomes na Receita Federal</button>
+            <p id="rf-current-progress" class="text-xs text-slate-400 mt-2 hidden"></p>
+        </div>
+    </div>
+
+    <!-- TABELA COMPARATIVA -->
+    <div class="glass-card p-6 rounded-xl border border-slate-800 bg-slate-900/50">
+        <div class="flex items-center justify-between mb-4">
+            <h4 class="text-sm font-semibold text-slate-200 flex items-center gap-2">📋 COMPARATIVO POR CLIENTE</h4>
+            <span id="renewal-total-records" class="text-xs text-slate-400">0 registros</span>
+        </div>
+
+        <div id="renewal-placeholder" class="py-12 text-center text-slate-500">
+            <i class="fas fa-cloud-upload-alt text-4xl mb-3 opacity-40"></i>
+            <p class="text-sm">Carregue as duas planilhas para visualizar o comparativo.</p>
+        </div>
+
+        <div id="renewal-table-wrapper" class="overflow-x-auto hidden">
+            <table class="w-full text-left text-sm border-collapse">
+                <thead>
+                    <tr class="border-b border-slate-800 text-slate-400 font-medium text-xs uppercase tracking-wider">
+                        <th class="p-3">#</th>
+                        <th class="p-3">CLIENTE</th>
+                        <th class="p-3">DOCUMENTO</th>
+                        <th class="p-3">NOME ANO ANTERIOR</th>
+                        <th class="p-3">NOME ANO ATUAL</th>
+                        <th class="p-3">MATCH</th>
+                        <th class="p-3">STATUS</th>
+                    </tr>
+                </thead>
+                <tbody id="renewal-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
 
                 <!-- FINANCIAL -->
                 <section id="section-financial" class="hidden space-y-4 section-transition">
@@ -4325,6 +4290,10 @@ function fetchReceitaFederalForCurrent() {
 }
 
 async function fetchReceitaFederalBulk(data, type) {
+    if (!data || data.length === 0) {
+        showToast('Nenhum dado carregado para buscar.', 'error');
+        return;
+    }
     if (state._rfFetching) {
         showToast('Já existe uma busca em andamento.', 'error');
         return;
@@ -4332,64 +4301,70 @@ async function fetchReceitaFederalBulk(data, type) {
     
     state._rfFetching = true;
 
-    // Identifica os elementos da tela para mostrar o progresso
-    const progressId = type === 'prev' ? 'rf-prev-progress' : 'rf-current-progress';
-    const progressEl = document.getElementById(progressId);
-    const btnId = type === 'prev' ? 'rf-prev-btn' : 'rf-current-btn';
-    const btnEl = document.getElementById(btnId);
+    var progressId = type === 'prev' ? 'rf-prev-progress' : 'rf-current-progress';
+    var progressEl = document.getElementById(progressId);
+    var btnId = type === 'prev' ? 'rf-prev-btn' : 'rf-current-btn';
+    var btnEl = document.getElementById(btnId);
 
     if (progressEl) {
         progressEl.classList.remove('hidden');
-        progressEl.innerText = `Iniciando busca para ${data.length} registros...`;
+        progressEl.innerText = 'Iniciando busca para ' + data.length + ' registros...';
     }
     if (btnEl) btnEl.disabled = true;
 
-    let atualizados = 0;
+    var atualizados = 0;
 
-    // Loop que passa por cada cliente com a pausa de segurança
-    for (let i = 0; i < data.length; i++) {
-        const item = data[i];
-        const doc = String(item.doc || '').replace(/\D/g, ''); // Limpa a formatação
+    for (var i = 0; i < data.length; i++) {
+        var item = data[i];
+        var rawDoc = item.doc || '';
 
-        // Só busca se for CNPJ (14 dígitos)
+        // Tenta encontrar o CNPJ em qualquer propriedade do Excel carregado
+        if (!rawDoc && item.raw) {
+            for (var key in item.raw) {
+                var kUpper = String(key).toUpperCase().trim();
+                if (kUpper.includes('CNPJ') || kUpper.includes('CPF') || kUpper.includes('DOC')) {
+                    rawDoc = item.raw[key];
+                    break;
+                }
+            }
+        }
+        
+        var doc = String(rawDoc || '').replace(/\D/g, ''); 
+        if (doc.length > 11 && doc.length < 14) doc = doc.padStart(14, '0');
+
         if (doc.length === 14) {
+            item.doc = doc;
             if (progressEl) {
-                progressEl.innerText = `Buscando ${i + 1} de ${data.length}... aguarde.`;
+                progressEl.innerText = 'Buscando ' + (i + 1) + ' de ' + data.length + '...';
             }
 
             try {
-                // Usa o Proxy para evitar bloqueio de CORS
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent('https://brasilapi.com.br/api/cnpj/v1/' + doc)}`;
-                const response = await fetch(proxyUrl);
+                var proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent('https://brasilapi.com.br/api/cnpj/v1/' + doc);
+                var response = await fetch(proxyUrl);
                 
                 if (response.ok) {
-                    const result = await response.json();
+                    var result = await response.json();
                     if (result.razao_social) {
-                        item.name = result.razao_social; // Atualiza o nome na memória
+                        item.name = result.razao_social; 
                         atualizados++;
                     }
                 }
             } catch (error) {
-                console.warn(`Erro ao buscar CNPJ ${doc}:`, error);
+                console.warn('Erro ao buscar CNPJ ' + doc + ':', error);
             }
-
-            // O SEGREDO: Pausa de 1.5 segundos (1500ms) antes de buscar o próximo CNPJ
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await new Promise(function(resolve) { setTimeout(resolve, 1200); });
         }
     }
 
-    // Finaliza o processo
     state._rfFetching = false;
     if (progressEl) {
-        progressEl.innerText = `Concluído: ${atualizados} atualizados.`;
-        progressEl.classList.add('text-emerald-500');
-        progressEl.classList.remove('text-slate-400');
+        progressEl.innerText = 'Concluído: ' + atualizados + ' atualizados.';
+        progressEl.classList.add('text-emerald-400');
     }
     if (btnEl) btnEl.disabled = false;
 
-    showToast(`Busca concluída! ${atualizados} registros atualizados.`, 'success');
+    showToast('Busca concluída! ' + atualizados + ' registros atualizados.', 'success');
 
-    // Força a atualização da tabela e dos cards na tela com os nomes novos
     if (typeof processRenewalComparison === 'function') processRenewalComparison();
     if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
     if (typeof saveState === 'function') saveState();
@@ -7773,45 +7748,71 @@ function handleRenewalUpload(event, type) {
                 return;
             }
 
-            const headers = Object.keys(jsonData[0]);
-            const nameCol = headers.find(h => /cliente|nome|name|empresa|razao|razao social|razaosocial|razao_social|titular|contratante/i.test(h)) || headers[0];
-            const docCol = headers.find(h => /cpf|cnpj|documento|doc|registro|inscrição/i.test(h)) || null;
-
+            // LEITOR FLEXÍVEL: Pega qualquer coluna disponível na planilha
             const processedData = jsonData.map(row => {
-                const name = String(row[nameCol] || '').trim();
-                const doc = docCol ? String(row[docCol] || '').replace(/\D/g, '') : '';
+                let name = '';
+                let doc = '';
+
+                // Varre todas as colunas da linha
+                for (let key in row) {
+                    const kUpper = String(key).toUpperCase().trim();
+                    const val = String(row[key] || '').trim();
+
+                    if (!val) continue;
+
+                    if (kUpper.includes('CNPJ') || kUpper.includes('CPF') || kUpper.includes('DOC')) {
+                        doc = val.replace(/\D/g, '');
+                    } else if (!name && (kUpper.includes('CLIENTE') || kUpper.includes('NOME') || kUpper.includes('EMPRESA') || kUpper.includes('RAZAO') || kUpper.includes('RAZÃO'))) {
+                        name = val;
+                    }
+                }
+
+                // Se não achou por nome específico, usa o primeiro texto válido da linha como nome
+                if (!name) {
+                    const firstVal = Object.values(row).find(v => String(v).trim().length > 0);
+                    name = firstVal ? String(firstVal).trim() : '';
+                }
+
+                if (doc.length > 11 && doc.length < 14) doc = doc.padStart(14, '0');
+
                 return { name, doc, raw: row };
             }).filter(item => item.name.length > 0 || item.doc.length > 0);
 
             if (processedData.length === 0) {
-                showToast('Nenhum cliente válido encontrado na coluna "Cliente".', 'error');
+                showToast('Nenhum dado válido encontrado na planilha.', 'error');
                 return;
+            }
+
+            if (!state.renewalComparison) {
+                state.renewalComparison = { prevData: [], currentData: [], results: [] };
             }
 
             if (type === 'prev') {
                 state.renewalComparison.prevData = processedData;
-                document.getElementById('renewal-prev-stats').classList.remove('hidden');
-                document.getElementById('renewal-prev-count').textContent = processedData.length;
-                document.getElementById('renewal-prev-status').textContent = '✅ Carregado';
-                document.getElementById('renewal-prev-status').className = 'text-emerald-500';
-                showToast(`✅ ${processedData.length} clientes do ano anterior carregados.`);
+                const countEl = document.getElementById('renewal-prev-count');
+                const statusEl = document.getElementById('renewal-prev-status');
+                if (countEl) countEl.textContent = processedData.length;
+                if (statusEl) {
+                    statusEl.textContent = '✅ Carregado';
+                    statusEl.className = 'text-xs text-emerald-400 font-medium';
+                }
+                showToast(`✅ ${processedData.length} clientes do ano anterior carregados.`, 'success');
             } else {
                 state.renewalComparison.currentData = processedData;
-                document.getElementById('renewal-current-stats').classList.remove('hidden');
-                document.getElementById('renewal-current-count').textContent = processedData.length;
-                document.getElementById('renewal-current-status').textContent = '✅ Carregado';
-                document.getElementById('renewal-current-status').className = 'text-emerald-500';
-                showToast(`✅ ${processedData.length} clientes do ano atual carregados.`);
+                const countEl = document.getElementById('renewal-current-count');
+                const statusEl = document.getElementById('renewal-current-status');
+                if (countEl) countEl.textContent = processedData.length;
+                if (statusEl) {
+                    statusEl.textContent = '✅ Carregado';
+                    statusEl.className = 'text-xs text-emerald-400 font-medium';
+                }
+                showToast(`✅ ${processedData.length} clientes do ano atual carregados.`, 'success');
             }
 
-            // Executa o cruzamento e renderiza a tela na hora
-            processRenewalComparison();
-            if (typeof renderRenewalComparison === 'function') {
-                renderRenewalComparison();
-            }
-            if (typeof saveState === 'function') {
-                saveState();
-            }
+            if (typeof processRenewalComparison === 'function') processRenewalComparison();
+            if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
+            if (typeof saveState === 'function') saveState();
+
         } catch (error) {
             console.error('Erro ao processar planilha:', error);
             showToast('Erro ao processar o arquivo.', 'error');
@@ -7820,343 +7821,190 @@ function handleRenewalUpload(event, type) {
     reader.readAsArrayBuffer(file);
 }
 
+// 3. CRUZAMENTO DE DADOS LIMPO
 function processRenewalComparison() {
-    const prev = state.renewalComparison.prevData || [];
-    const current = state.renewalComparison.currentData || [];
+    if (!state.renewalComparison) return;
 
-    // Helper para extrair o texto/nome de qualquer propriedade da linha
-    function getTexto(item) {
-        if (!item) return "";
-        let raw = item.raw || {};
-        return String(
-            item.name || item.nome || item.cliente || item.nomeCliente || item.razaoSocial || item.doc ||
-            raw.name || raw.nome || raw.cliente || raw.Cliente || raw.RazaoSocial || raw.NOME || ""
-        ).trim();
-    }
+    var prevData = state.renewalComparison.prevData || [];
+    var currentData = state.renewalComparison.currentData || [];
+    var results = [];
 
-    // Helper para extrair apenas números do documento (CPF/CNPJ)
-    function getDoc(item) {
-        if (!item) return "";
-        let raw = item.raw || {};
-        let d = item.doc || item.documento || item.cpfCnpj || item.cnpj || item.cpf ||
-                raw.doc || raw.documento || raw.cpfCnpj || raw.cnpj || raw.cpf || raw.CPF || raw.CNPJ || "";
-        return String(d).replace(/\D/g, '');
-    }
-
-    // Termos do rodapé financeiro a serem ignorados
-    const termosProibidos = ['totais', 'quantidade:', 'valor total:', 'inss:', 'csll:', 'ir:', 'pis:', 'cofins:'];
-
-    function ehRodape(item) {
-        let txt = getTexto(item).toLowerCase();
-        return termosProibidos.some(termo => txt.startsWith(termo) || txt === termo);
-    }
-
-    const prevClean = prev.filter(item => !ehRodape(item));
-    const currentClean = current.filter(item => !ehRodape(item));
-
-    const indicator = document.getElementById('renewal-processing-indicator');
-    if (indicator) indicator.classList.add('hidden');
-
-    const currentByDoc = new Map();
-    const currentByName = new Map();
-
-    currentClean.forEach(item => {
-        let d = getDoc(item);
-        let n = getTexto(item).toLowerCase();
-
-        if (d && (d.length === 11 || d.length === 14)) currentByDoc.set(d, item);
-        if (n && n.length > 1) currentByName.set(n, item);
-    });
-
-    const comparisonResults = [];
-    const matchedCurrentItems = new Set();
-
-    // Cruzamento do Ano Anterior
-    prevClean.forEach((prevItem, index) => {
-        let prevDoc = getDoc(prevItem);
-        let prevNome = getTexto(prevItem);
-        let prevNomeNorm = prevNome.toLowerCase();
-
-        let matchedItem = null;
-        let matchType = null;
-
-        if (prevDoc && currentByDoc.has(prevDoc)) {
-            matchedItem = currentByDoc.get(prevDoc);
-            matchType = 'Documento';
-        } else if (prevNomeNorm && currentByName.has(prevNomeNorm)) {
-            matchedItem = currentByName.get(prevNomeNorm);
-            matchType = 'Nome';
+    function getName(item) {
+        if (!item) return '';
+        if (item.name) return item.name;
+        if (item.raw) {
+            for (var k in item.raw) {
+                var kUpper = String(k).toUpperCase();
+                if (kUpper.includes('CLIENTE') || kUpper.includes('NOME') || kUpper.includes('RAZAO')) {
+                    return item.raw[k];
+                }
+            }
         }
+        return '-';
+    }
 
-        if (matchedItem) {
-            matchedCurrentItems.add(matchedItem);
-            comparisonResults.push({
-                index: index + 1,
-                clientPrev: prevNome || '-',
-                doc: prevDoc || getDoc(matchedItem) || '-',
-                namePrev: prevNome || '-',
-                nameCurrent: getTexto(matchedItem) || '-',
-                matchType: matchType,
+    function getDoc(item) {
+        if (!item) return '';
+        var d = item.doc || '';
+        if (!d && item.raw) {
+            for (var k in item.raw) {
+                var kUpper = String(k).toUpperCase();
+                if (kUpper.includes('CNPJ') || kUpper.includes('CPF') || kUpper.includes('DOC')) {
+                    d = item.raw[k];
+                    break;
+                }
+            }
+        }
+        return String(d || '').replace(/\D/g, '');
+    }
+
+    for (var i = 0; i < prevData.length; i++) {
+        var pItem = prevData[i];
+        var pName = getName(pItem);
+        var pDoc = getDoc(pItem);
+
+        var matchCurr = currentData.find(function(c) {
+            var cDoc = getDoc(c);
+            var cName = getName(c);
+            if (pDoc && cDoc && pDoc === cDoc) return true;
+            if (pName && cName && pName.toLowerCase() === cName.toLowerCase() && pName !== '-') return true;
+            return false;
+        });
+
+        if (matchCurr) {
+            results.push({
+                clientPrev: pName,
+                clientCurrent: getName(matchCurr),
+                doc: pDoc || getDoc(matchCurr),
+                namePrev: pName,
+                nameCurrent: getName(matchCurr),
+                matchType: (pDoc && getDoc(matchCurr) && pDoc === getDoc(matchCurr)) ? 'DOCUMENTO' : 'NOME',
                 status: 'RENOVOU'
             });
         } else {
-            comparisonResults.push({
-                index: index + 1,
-                clientPrev: prevNome || '-',
-                doc: prevDoc || '-',
-                namePrev: prevNome || '-',
+            results.push({
+                clientPrev: pName,
+                clientCurrent: '-',
+                doc: pDoc,
+                namePrev: pName,
                 nameCurrent: 'Não presente',
                 matchType: '-',
                 status: 'NÃO RENOVOU'
             });
         }
-    });
+    }
 
-    // Novos do Ano Atual
-    currentClean.forEach(currentItem => {
-        if (!matchedCurrentItems.has(currentItem)) {
-            let currentNome = getTexto(currentItem);
-            comparisonResults.push({
-                index: comparisonResults.length + 1,
-                clientPrev: 'Não presente',
-                doc: getDoc(currentItem) || '-',
+    for (var j = 0; j < currentData.length; j++) {
+        var cItem = currentData[j];
+        var cName = getName(cItem);
+        var cDoc = getDoc(cItem);
+
+        var exists = prevData.some(function(p) {
+            var pDoc = getDoc(p);
+            var pName = getName(p);
+            if (cDoc && pDoc && cDoc === pDoc) return true;
+            if (cName && pName && cName.toLowerCase() === pName.toLowerCase() && cName !== '-') return true;
+            return false;
+        });
+
+        if (!exists) {
+            results.push({
+                clientPrev: '-',
+                clientCurrent: cName,
+                doc: cDoc,
                 namePrev: 'Não presente',
-                nameCurrent: currentNome || '-',
+                nameCurrent: cName,
                 matchType: '-',
                 status: 'NOVO'
             });
         }
-    });
-
-    // Atualiza resultados no estado global
-    state.renewalComparison.results = comparisonResults;
-
-    // Dispara a renderização imediata da interface
-    if (typeof renderRenewalComparison === 'function') {
-        renderRenewalComparison();
     }
+
+    state.renewalComparison.results = results;
 }
 
-// Função de renderização completa e segura
-
+// 4. RENDERIZADOR DA TABELA
 function renderRenewalComparison() {
     try {
         var results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
-        var prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
-        var currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
-
-        // 1. Atualiza os Contadores
-        var renovaram = 0;
-        var naoRenovaram = 0;
-        var novos = 0;
-        var r = 0;
         
-        for (r = 0; r < results.length; r++) {
+        var renovaram = 0, naoRenovaram = 0, novos = 0;
+        for (var r = 0; r < results.length; r++) {
             if (results[r].status === 'RENOVOU') renovaram++;
             else if (results[r].status === 'NÃO RENOVOU') naoRenovaram++;
             else novos++;
         }
-        
-        var totalPrev = prevData.length;
-        var totalCurrent = currentData.length;
+
+        var totalPrev = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData.length : 0;
+        var totalCurrent = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData.length : 0;
         var taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
-        var valores = [totalPrev, totalCurrent, renovaram, naoRenovaram, taxa + '%', novos];
-        var numerosNaTela = document.querySelectorAll('.grid .text-3xl, .grid .text-4xl, .grid h3, .grid .text-2xl, .grid .text-brand-400');
-        var indicesValidos = [];
-        var b = 0;
-        
-        for (b = 0; b < numerosNaTela.length; b++) {
-            var txt = numerosNaTela[b].innerText.trim();
-            if(txt === '0' || txt === '0%') {
-                indicesValidos.push(numerosNaTela[b]);
-            }
+
+        var setVal = function(id, val) { 
+            var el = document.getElementById(id); 
+            if (el) el.innerText = val; 
+        };
+
+        setVal('renewal-val-prev', totalPrev);
+        setVal('renewal-val-current', totalCurrent);
+        setVal('renewal-val-renovaram', renovaram);
+        setVal('renewal-val-nao-renovaram', naoRenovaram);
+        setVal('renewal-val-taxa', taxa + '%');
+        setVal('renewal-val-novos', novos);
+        setVal('renewal-prev-count', totalPrev);
+        setVal('renewal-current-count', totalCurrent);
+        setVal('renewal-total-records', results.length + ' registros');
+
+        var tableBody = document.getElementById('renewal-table-body');
+        var tableWrapper = document.getElementById('renewal-table-wrapper');
+        var placeholder = document.getElementById('renewal-placeholder');
+
+        if (results.length === 0) {
+            if (typeof renderEmptyComparison === 'function') renderEmptyComparison();
+            return;
         }
 
-        if(indicesValidos.length < 6 && numerosNaTela.length >= 6) {
-            indicesValidos = Array.from(numerosNaTela).slice(0, 6);
-        }
+        if (placeholder) placeholder.classList.add('hidden');
+        if (tableWrapper) tableWrapper.classList.remove('hidden');
 
-        if(indicesValidos.length >= 6) {
-            var v = 0;
-            for (v = 0; v < 6; v++) {
-                indicesValidos[v].innerText = valores[v];
-            }
-        }
-
-        // 2. Transforma o aviso na Tabela
-        if (results.length > 0) {
-            var tableContainer = document.getElementById('renewal-table-wrapper');
-            
-            if (!tableContainer) {
-                var elementosTexto = document.querySelectorAll('p, div, span');
-                var areaAviso = null;
-                var t = 0;
-                
-                for (t = 0; t < elementosTexto.length; t++) {
-                    var texto = elementosTexto[t].innerText || '';
-                    if(texto.indexOf('Carregue as duas planilhas') !== -1 && texto.length < 100) {
-                        areaAviso = elementosTexto[t];
-                        break;
-                    }
-                }
-
-                if (areaAviso) {
-                    areaAviso.style.display = 'none';
-                    var cardPai = areaAviso.closest('.glass-card');
-                    if (!cardPai && areaAviso.parentElement) {
-                        cardPai = areaAviso.parentElement;
-                    }
-                    if (cardPai) {
-                        tableContainer = document.createElement('div');
-                        tableContainer.id = 'renewal-table-wrapper';
-                        tableContainer.className = 'overflow-x-auto w-full mt-4 pb-4';
-                        cardPai.appendChild(tableContainer);
-                    }
-                }
+        var rowsHtml = '';
+        for (var z = 0; z < results.length; z++) {
+            var row = results[z];
+            var statusBadge = '';
+            if (row.status === 'RENOVOU') {
+                statusBadge = '🔄 RENOVOU';
+            } else if (row.status === 'NÃO RENOVOU') {
+                statusBadge = '❌ NÃO RENOVOU';
+            } else {
+                statusBadge = '⭐ NOVO';
             }
 
-            if (tableContainer) {
-                var html = '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '' +
-                           '';
-
-                // --- O SEGREDO ESTÁ AQUI ---
-                // Declaramos as variáveis fora de qualquer estrutura de repetição
-                var numeroDaLinha = 1;
-                var linhaAtual = null;
-                var statusBadge = '';
-                var matchBadge = '';
-                var z = 0;
-
-                for (z = 0; z < results.length; z++) {
-                    linhaAtual = results[z];
-                    statusBadge = '';
-                    
-                    if (linhaAtual.status === 'RENOVOU') {
-                        statusBadge = '🔄 RENOVOU';
-                    } else if (linhaAtual.status === 'NÃO RENOVOU') {
-                        statusBadge = '❌ NÃO RENOVOU';
-                    } else {
-                        statusBadge = '⭐ NOVO';
-                    }
-
-                    matchBadge = '-';
-                    if (linhaAtual.matchType && linhaAtual.matchType !== '-') {
-                        matchBadge = '📇 ' + linhaAtual.matchType + '';
-                    }
-
-                    html += '' +
-                            '' +
-                            '' +
-                            '' +
-                            '' +
-                            '' +
-                            '' +
-                            '' +
-                            '';
-                    
-                    numeroDaLinha++; // Soma de forma global sem depender de loops do navegador
-                }
-
-                html += '#CLIENTEDOCUMENTONOME ANO ANTERIORNOME ANO ATUALMATCHSTATUS' + numeroDaLinha + '' + (linhaAtual.clientPrev || '-') + '' + (linhaAtual.doc || '-') + '' + (linhaAtual.namePrev || '-') + '' + (linhaAtual.nameCurrent || '-') + '' + matchBadge + '' + statusBadge + '';
-                tableContainer.innerHTML = html;
+            var matchBadge = '-';
+            if (row.matchType && row.matchType !== '-') {
+                matchBadge = '📇 ' + row.matchType + '';
             }
+
+            var nomeExibicao = (row.clientPrev && row.clientPrev !== 'Não presente') ? row.clientPrev : (row.clientCurrent || '-');
+            var docExibicao = row.doc || '-';
+
+            rowsHtml += '' +
+                '' + (z + 1) + '' +
+                '' + nomeExibicao + '' +
+                '' + docExibicao + '' +
+                '' + (row.namePrev || '-') + '' +
+                '' + (row.nameCurrent || '-') + '' +
+                '' + matchBadge + '' +
+                '' + statusBadge + '' +
+                '';
         }
+
+        if (tableBody) {
+            tableBody.innerHTML = rowsHtml;
+        }
+
     } catch (erro) {
-        console.error("Erro ao desenhar a interface. Detalhes:", erro);
+        console.error("Erro ao renderizar renovações:", erro);
     }
 }
-
-            function renderEmptyComparison() {
-                document.getElementById('renewal-comparison-container').innerHTML = `
-                    <div class="text-center text-slate-500 py-8">
-                        <i class="fas fa-upload text-3xl text-slate-700 mb-3 block"></i>
-                        <p class="text-sm font-medium">Carregue as duas planilhas para visualizar o comparativo.</p>
-                        <p class="text-xs text-slate-600 mt-1">O sistema buscará pelo nome do cliente.</p>
-                    </div>
-                `;
-                document.getElementById('renewal-comparison-count').textContent = '0 registros';
-                document.getElementById('renewal-stat-total-prev').textContent = '0';
-                document.getElementById('renewal-stat-total-current').textContent = '0';
-                document.getElementById('renewal-stat-renewed').textContent = '0';
-                document.getElementById('renewal-stat-not-renewed').textContent = '0';
-                document.getElementById('renewal-stat-new').textContent = '0';
-                document.getElementById('renewal-stat-rate').textContent = '0%';
-            }
-
-
-            function exportRenewalComparison() {
-                const matched = state.renewalComparison.matched;
-                if (!matched || matched.length === 0) {
-                    showToast('Nenhum dado para exportar.', 'error');
-                    return;
-                }
-
-                const data = matched.map(item => ({
-                    'Cliente': item.name || '-',
-                    'CNPJ': item.doc || '-',
-                    'Nome Ano Anterior': item.prevName || 'Não presente',
-                    'Nome Ano Atual': item.currentName || 'Não presente',
-                    'Tipo de Match': item.matchType === 'nome' ? 'Nome' : 
-                                    item.matchType === 'cnpj' ? 'CNPJ' : 'Ausente',
-                    'Status': item.status === 'renewed' ? 'Renovou' : 
-                              item.status === 'new' ? 'Novo' : 'Não Renovou'
-                }));
-
-                try {
-                    const wb = XLSX.utils.book_new();
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Comparativo Renovações');
-                    XLSX.writeFile(wb, 'comparativo_renovacoes.xlsx');
-                    showToast('Relatório exportado com sucesso!');
-                } catch (e) {
-                    showToast('Erro ao exportar.', 'error');
-                }
-            }
-
-            function clearRenewalComparison() {
-                openPremiumConfirm('Limpar Dados', 'Deseja limpar todos os dados de renovação carregados?', () => {
-                    state.renewalComparison = {
-                        prevData: [],
-                        currentData: [],
-                        matched: [],
-                        stats: { totalPrev: 0, totalCurrent: 0, renewed: 0, notRenewed: 0, new: 0, rate: 0 },
-                        reportData: null
-                    };
-                    document.getElementById('renewal-prev-stats').classList.add('hidden');
-                    document.getElementById('renewal-current-stats').classList.add('hidden');
-                    document.getElementById('renewal-prev-file').value = '';
-                    document.getElementById('renewal-current-file').value = '';
-                    document.getElementById('rf-prev-progress').classList.add('hidden');
-                    document.getElementById('rf-current-progress').classList.add('hidden');
-                    const prevBtn = document.getElementById('rf-prev-btn');
-                    const currentBtn = document.getElementById('rf-current-btn');
-                    prevBtn.disabled = false;
-                    prevBtn.innerHTML = '<i class="fas fa-search"></i> Buscar Nomes na Receita Federal';
-                    currentBtn.disabled = false;
-                    currentBtn.innerHTML = '<i class="fas fa-search"></i> Buscar Nomes na Receita Federal';
-                    state._rfFetching = false;
-                    state._rfCancelled = false;
-                    const indicator = document.getElementById('renewal-processing-indicator');
-                    if (indicator) indicator.classList.add('hidden');
-                    saveState();
-                    renderRenewalComparison();
-                    showToast('Dados limpos.');
-                });
-            }
-
-            // ============================================================
-            //  RELATÓRIO DE RENOVAÇÕES
-            // ============================================================
             function generateRenewalReport() {
                 const matched = state.renewalComparison.matched;
                 if (!matched || matched.length === 0) {
@@ -9182,7 +9030,540 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (loginContainer) loginContainer.classList.remove('hidden');
     }
 });
+// 1. Função para Exportar a tabela para Excel
+function exportRenewalComparison() {
+    try {
+        if (!state.renewalComparison || !state.renewalComparison.results || state.renewalComparison.results.length === 0) {
+            showToast('Nenhum dado para exportar.', 'error');
+            return;
+        }
+        
+        const dataToExport = state.renewalComparison.results.map((row, i) => ({
+            '#': i + 1,
+            'Cliente': row.clientPrev || row.clientCurrent || '-',
+            'Documento': row.doc || '-',
+            'Nome Ano Anterior': row.namePrev || '-',
+            'Nome Ano Atual': row.nameCurrent || '-',
+            'Match': row.matchType || '-',
+            'Status': row.status || '-'
+        }));
 
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Renovações");
+        XLSX.writeFile(wb, "comparativo_renovacoes.xlsx");
+        showToast('Exportado com sucesso!', 'success');
+    } catch (e) {
+        console.error('Erro ao exportar:', e);
+        showToast('Erro ao exportar arquivo.', 'error');
+    }
+}
+
+// 2. Função para Limpar os Dados
+function clearRenewalComparison() {
+    state.renewalComparison = { prevData: [], currentData: [], results: [] };
+    
+    // Zera contadores na tela
+    const idsToZero = ['renewal-val-prev', 'renewal-val-current', 'renewal-val-renovaram', 'renewal-val-nao-renovaram', 'renewal-val-novos', 'renewal-prev-count', 'renewal-current-count'];
+    idsToZero.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '0';
+    });
+
+    const elTaxa = document.getElementById('renewal-val-taxa');
+    if (elTaxa) elTaxa.innerText = '0%';
+
+    const elTotalRec = document.getElementById('renewal-total-records');
+    if (elTotalRec) elTotalRec.innerText = '0 registros';
+
+    const elStatusPrev = document.getElementById('renewal-prev-status');
+    const elStatusCurr = document.getElementById('renewal-current-status');
+    if (elStatusPrev) { elStatusPrev.innerText = 'Pendente'; elStatusPrev.className = 'text-xs text-slate-500'; }
+    if (elStatusCurr) { elStatusCurr.innerText = 'Pendente'; elStatusCurr.className = 'text-xs text-slate-500'; }
+
+    // Limpa a tabela
+    renderEmptyComparison();
+    showToast('Dados limpos com sucesso.', 'info');
+}
+
+// 3. Função para Gerar Relatório
+function generateRenewalReport() {
+    showToast('Gerando relatório...', 'info');
+    window.print();
+}
+
+// 4. Renderizador Definitivo da Tabela sem quebrar o HTML
+// 1. LIMPEZA TOTAL DA MEMÓRIA
+function clearRenewalComparison() {
+    state.renewalComparison = { prevData: [], currentData: [], results: [] };
+    localStorage.removeItem('certclick_renewal_comparison');
+    
+    var idsToZero = ['renewal-val-prev', 'renewal-val-current', 'renewal-val-renovaram', 'renewal-val-nao-renovaram', 'renewal-val-novos', 'renewal-prev-count', 'renewal-current-count'];
+    idsToZero.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.innerText = '0';
+    });
+
+    var elTaxa = document.getElementById('renewal-val-taxa');
+    if (elTaxa) elTaxa.innerText = '0%';
+
+    var elTotalRec = document.getElementById('renewal-total-records');
+    if (elTotalRec) elTotalRec.innerText = '0 registros';
+
+    var elStatusPrev = document.getElementById('renewal-prev-status');
+    var elStatusCurr = document.getElementById('renewal-current-status');
+    if (elStatusPrev) { elStatusPrev.innerText = 'Pendente'; elStatusPrev.className = 'text-xs text-slate-500'; }
+    if (elStatusCurr) { elStatusCurr.innerText = 'Pendente'; elStatusCurr.className = 'text-xs text-slate-500'; }
+
+    var tableBody = document.getElementById('renewal-table-body');
+    if (tableBody) tableBody.innerHTML = '';
+
+    renderEmptyComparison();
+    if (typeof showToast === 'function') showToast('Dados limpos com sucesso.', 'info');
+}
+
+// 2. LEITOR INTELIGENTE DE PLANILHAS (Filtra impostos e datas)
+function handleRenewalUpload(event, type) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var data = new Uint8Array(e.target.result);
+            var workbook = XLSX.read(data, { type: 'array', cellDates: true });
+            var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            var jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+            if (!jsonData || jsonData.length === 0) {
+                showToast('A planilha está vazia.', 'error');
+                return;
+            }
+
+            var processedData = jsonData.map(function(row) {
+                var name = '';
+                var doc = '';
+
+                // Varre colunas ignorando dados financeiros
+                for (var key in row) {
+                    var kUpper = String(key).toUpperCase().trim();
+                    var val = String(row[key] || '').trim();
+
+                    if (!val) continue;
+
+                    // Ignora impostos, valores e datas
+                    if (kUpper.includes('INSS') || kUpper.includes('CSLL') || kUpper.includes('COFINS') || 
+                        kUpper.includes('PIS') || kUpper.includes('IR') || kUpper.includes('TOTAL') || 
+                        kUpper.includes('DATA') || kUpper.includes('VALOR') || kUpper.includes('STATUS')) {
+                        continue;
+                    }
+
+                    if (kUpper.includes('CNPJ') || kUpper.includes('CPF') || kUpper.includes('DOC') || kUpper.includes('REGISTRO')) {
+                        doc = val.replace(/\D/g, '');
+                    } else if (!name && (kUpper === 'NOME' || kUpper.includes('CLIENTE') || kUpper.includes('RAZAO') || kUpper.includes('EMPRESA'))) {
+                        name = val;
+                    }
+                }
+
+                // Fallback para encontrar nome limpo se o cabeçalho for diferente
+                if (!name) {
+                    for (var key2 in row) {
+                        var kUpper2 = String(key2).toUpperCase().trim();
+                        if (kUpper2.includes('INSS') || kUpper2.includes('CSLL') || kUpper2.includes('COFINS') || 
+                            kUpper2.includes('PIS') || kUpper2.includes('IR') || kUpper2.includes('TOTAL') || 
+                            kUpper2.includes('DATA') || kUpper2.includes('VALOR') || kUpper2.includes('STATUS')) continue;
+                        
+                        var val2 = String(row[key2] || '').trim();
+                        if (val2 && isNaN(val2) && !val2.includes('/') && val2.length > 2) {
+                            name = val2;
+                            break;
+                        }
+                    }
+                }
+
+                if (doc.length > 11 && doc.length < 14) doc = doc.padStart(14, '0');
+
+                return { name: name, doc: doc, raw: row };
+            }).filter(function(item) { return item.name.length > 0 || item.doc.length > 0; });
+
+            if (processedData.length === 0) {
+                showToast('Nenhum dado válido encontrado na planilha.', 'error');
+                return;
+            }
+
+            if (!state.renewalComparison) {
+                state.renewalComparison = { prevData: [], currentData: [], results: [] };
+            }
+
+            if (type === 'prev') {
+                state.renewalComparison.prevData = processedData;
+                var countEl = document.getElementById('renewal-prev-count');
+                var statusEl = document.getElementById('renewal-prev-status');
+                if (countEl) countEl.textContent = processedData.length;
+                if (statusEl) {
+                    statusEl.textContent = '✅ Carregado';
+                    statusEl.className = 'text-xs text-emerald-400 font-medium';
+                }
+                showToast('✅ ' + processedData.length + ' clientes do ano anterior carregados.', 'success');
+            } else {
+                state.renewalComparison.currentData = processedData;
+                var countEl = document.getElementById('renewal-current-count');
+                var statusEl = document.getElementById('renewal-current-status');
+                if (countEl) countEl.textContent = processedData.length;
+                if (statusEl) {
+                    statusEl.textContent = '✅ Carregado';
+                    statusEl.className = 'text-xs text-emerald-400 font-medium';
+                }
+                showToast('✅ ' + processedData.length + ' clientes do ano atual carregados.', 'success');
+            }
+
+            processRenewalComparison();
+            renderRenewalComparison();
+            saveState();
+
+        } catch (error) {
+            console.error('Erro ao processar planilha:', error);
+            showToast('Erro ao processar o arquivo.', 'error');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+
+// 4. RENDERIZADOR FORMATADO EM TABELA
+function renderRenewalComparison() {
+    try {
+        var results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
+        var prevData = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData : [];
+        var currentData = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData : [];
+
+        var renovaram = 0, naoRenovaram = 0, novos = 0;
+        for (var r = 0; r < results.length; r++) {
+            if (results[r].status === 'RENOVOU') renovaram++;
+            else if (results[r].status === 'NÃO RENOVOU') naoRenovaram++;
+            else novos++;
+        }
+
+        var totalPrev = prevData.length;
+        var totalCurrent = currentData.length;
+        var taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
+
+        var setVal = function(id, val) { 
+            var el = document.getElementById(id); 
+            if (el) el.innerText = val; 
+        };
+
+        setVal('renewal-val-prev', totalPrev);
+        setVal('renewal-val-current', totalCurrent);
+        setVal('renewal-val-renovaram', renovaram);
+        setVal('renewal-val-nao-renovaram', naoRenovaram);
+        setVal('renewal-val-taxa', taxa + '%');
+        setVal('renewal-val-novos', novos);
+        setVal('renewal-prev-count', totalPrev);
+        setVal('renewal-current-count', totalCurrent);
+        setVal('renewal-total-records', results.length + ' registros');
+
+        var tableBody = document.getElementById('renewal-table-body');
+        var tableWrapper = document.getElementById('renewal-table-wrapper');
+        var placeholder = document.getElementById('renewal-placeholder');
+
+        if (results.length === 0) {
+            renderEmptyComparison();
+            return;
+        }
+
+        if (placeholder) placeholder.classList.add('hidden');
+        if (tableWrapper) tableWrapper.classList.remove('hidden');
+
+        var rowsHtml = '';
+        for (var z = 0; z < results.length; z++) {
+            var row = results[z];
+            var statusBadge = '';
+            if (row.status === 'RENOVOU') {
+                statusBadge = '🔄 RENOVOU';
+            } else if (row.status === 'NÃO RENOVOU') {
+                statusBadge = '❌ NÃO RENOVOU';
+            } else {
+                statusBadge = '⭐ NOVO';
+            }
+
+            var matchBadge = '-';
+            if (row.matchType && row.matchType !== '-') {
+                matchBadge = '📇 ' + row.matchType + '';
+            }
+
+            var nomeExibicao = (row.clientPrev && row.clientPrev !== 'Não presente') ? row.clientPrev : (row.clientCurrent || '-');
+            var docExibicao = row.doc || '-';
+
+            rowsHtml += '' +
+                '' + (z + 1) + '' +
+                '' + nomeExibicao + '' +
+                '' + docExibicao + '' +
+                '' + (row.namePrev || '-') + '' +
+                '' + (row.nameCurrent || '-') + '' +
+                '' + matchBadge + '' +
+                '' + statusBadge + '' +
+                '';
+        }
+
+        if (tableBody) {
+            tableBody.innerHTML = rowsHtml;
+        }
+
+    } catch (erro) {
+        console.error("Erro ao renderizar renovações:", erro);
+    }
+}
+
+async function fetchReceitaFederalBulk(data, type) {
+    if (!data || data.length === 0) {
+        showToast('Nenhum dado carregado para buscar.', 'error');
+        return;
+    }
+    if (state._rfFetching) {
+        showToast('Já existe uma busca em andamento.', 'error');
+        return;
+    }
+    
+    state._rfFetching = true;
+
+    const progressId = type === 'prev' ? 'rf-prev-progress' : 'rf-current-progress';
+    const progressEl = document.getElementById(progressId);
+    const btnId = type === 'prev' ? 'rf-prev-btn' : 'rf-current-btn';
+    const btnEl = document.getElementById(btnId);
+
+    if (progressEl) {
+        progressEl.classList.remove('hidden');
+        progressEl.innerText = `Iniciando busca para ${data.length} registros...`;
+    }
+    if (btnEl) btnEl.disabled = true;
+
+    let atualizados = 0;
+
+    for (let i = 0; i < data.length; i++) {
+        const item = data[i];
+        let rawDoc = item.doc || '';
+
+        if (!rawDoc && item.raw) {
+            for (let key in item.raw) {
+                const kUpper = String(key).toUpperCase().trim();
+                if (kUpper.includes('CNPJ') || kUpper.includes('CPF') || kUpper.includes('DOC')) {
+                    rawDoc = item.raw[key];
+                    break;
+                }
+            }
+        }
+        
+        let doc = String(rawDoc || '').replace(/\D/g, ''); 
+        if (doc.length > 11 && doc.length < 14) doc = doc.padStart(14, '0');
+
+        if (doc.length === 14) {
+            item.doc = doc;
+            if (progressEl) {
+                progressEl.innerText = `Buscando ${i + 1} de ${data.length}...`;
+            }
+
+            try {
+                const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent('https://brasilapi.com.br/api/cnpj/v1/' + doc);
+                const response = await fetch(proxyUrl);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.razao_social) {
+                        item.name = result.razao_social; 
+                        atualizados++;
+                    }
+                }
+            } catch (error) {
+                console.warn('Erro ao buscar CNPJ ' + doc + ':', error);
+            }
+            await new Promise(resolve => setTimeout(resolve, 1200));
+        }
+    }
+
+    state._rfFetching = false;
+    if (progressEl) {
+        progressEl.innerText = `Concluído: ${atualizados} atualizados.`;
+        progressEl.classList.add('text-emerald-400');
+    }
+    if (btnEl) btnEl.disabled = false;
+
+    showToast(`Busca concluída! ${atualizados} registros atualizados.`, 'success');
+
+    if (typeof processRenewalComparison === 'function') processRenewalComparison();
+    if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
+    if (typeof saveState === 'function') saveState();
+}
+function renderEmptyComparison() {
+    var placeholder = document.getElementById('renewal-placeholder');
+    var tableWrapper = document.getElementById('renewal-table-wrapper');
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (tableWrapper) tableWrapper.classList.add('hidden');
+}
+
+function renderEmptyComparison() {
+    var placeholder = document.getElementById('renewal-placeholder');
+    var tableWrapper = document.getElementById('renewal-table-wrapper');
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (tableWrapper) tableWrapper.classList.add('hidden');
+}
+
+// =========================================================
+// CORREÇÃO DEFINITIVA RENOVAÇÕES (SOBRESCREVE AS ANTIGAS)
+// =========================================================
+
+function processRenewalComparison() {
+    if (!state.renewalComparison) return;
+
+    var prevData = state.renewalComparison.prevData || [];
+    var currentData = state.renewalComparison.currentData || [];
+    var results = [];
+
+    function getName(item) {
+        if (!item) return '';
+        if (item.name) return item.name;
+        if (item.raw) {
+            for (var k in item.raw) {
+                var kUpper = String(k).toUpperCase();
+                if (kUpper.includes('CLIENTE') || kUpper.includes('NOME') || kUpper.includes('RAZAO')) return item.raw[k];
+            }
+        }
+        return '-';
+    }
+
+    function getDoc(item) {
+        if (!item) return '';
+        var d = item.doc || '';
+        if (!d && item.raw) {
+            for (var k in item.raw) {
+                var kUpper = String(k).toUpperCase();
+                if (kUpper.includes('CNPJ') || kUpper.includes('CPF') || kUpper.includes('DOC')) {
+                    d = item.raw[k]; break;
+                }
+            }
+        }
+        return String(d || '').replace(/\D/g, '');
+    }
+
+    for (var i = 0; i < prevData.length; i++) {
+        var pItem = prevData[i];
+        var pName = getName(pItem);
+        var pDoc = getDoc(pItem);
+
+        var matchCurr = currentData.find(function(c) {
+            var cDoc = getDoc(c);
+            var cName = getName(c);
+            if (pDoc && cDoc && pDoc === cDoc) return true;
+            if (pName && cName && pName.toLowerCase() === cName.toLowerCase() && pName !== '-') return true;
+            return false;
+        });
+
+        if (matchCurr) {
+            results.push({
+                clientPrev: pName,
+                clientCurrent: getName(matchCurr),
+                doc: pDoc || getDoc(matchCurr),
+                namePrev: pName,
+                nameCurrent: getName(matchCurr),
+                matchType: (pDoc && getDoc(matchCurr) && pDoc === getDoc(matchCurr)) ? 'DOCUMENTO' : 'NOME',
+                status: 'RENOVOU'
+            });
+        } else {
+            results.push({
+                clientPrev: pName, clientCurrent: '-', doc: pDoc,
+                namePrev: pName, nameCurrent: 'Não presente', matchType: '-', status: 'NÃO RENOVOU'
+            });
+        }
+    }
+
+    for (var j = 0; j < currentData.length; j++) {
+        var cItem = currentData[j];
+        var cName = getName(cItem);
+        var cDoc = getDoc(cItem);
+
+        var exists = prevData.some(function(p) {
+            var pDoc = getDoc(p);
+            var pName = getName(p);
+            if (cDoc && pDoc && cDoc === pDoc) return true;
+            if (cName && pName && cName.toLowerCase() === pName.toLowerCase() && cName !== '-') return true;
+            return false;
+        });
+
+        if (!exists) {
+            results.push({
+                clientPrev: '-', clientCurrent: cName, doc: cDoc,
+                namePrev: 'Não presente', nameCurrent: cName, matchType: '-', status: 'NOVO'
+            });
+        }
+    }
+    state.renewalComparison.results = results;
+}
+
+function renderRenewalComparison() {
+    try {
+        var results = (state.renewalComparison && state.renewalComparison.results) ? state.renewalComparison.results : [];
+        var renovaram = 0, naoRenovaram = 0, novos = 0;
+        
+        for (var r = 0; r < results.length; r++) {
+            if (results[r].status === 'RENOVOU') renovaram++;
+            else if (results[r].status === 'NÃO RENOVOU') naoRenovaram++;
+            else novos++;
+        }
+
+        var totalPrev = (state.renewalComparison && state.renewalComparison.prevData) ? state.renewalComparison.prevData.length : 0;
+        var totalCurrent = (state.renewalComparison && state.renewalComparison.currentData) ? state.renewalComparison.currentData.length : 0;
+        var taxa = totalPrev > 0 ? ((renovaram / totalPrev) * 100).toFixed(1) : 0;
+
+        var setVal = function(id, val) { var el = document.getElementById(id); if (el) el.innerText = val; };
+        setVal('renewal-val-prev', totalPrev);
+        setVal('renewal-val-current', totalCurrent);
+        setVal('renewal-val-renovaram', renovaram);
+        setVal('renewal-val-nao-renovaram', naoRenovaram);
+        setVal('renewal-val-taxa', taxa + '%');
+        setVal('renewal-val-novos', novos);
+        setVal('renewal-prev-count', totalPrev);
+        setVal('renewal-current-count', totalCurrent);
+        setVal('renewal-total-records', results.length + ' registros');
+
+        var tableBody = document.getElementById('renewal-table-body');
+        var tableWrapper = document.getElementById('renewal-table-wrapper');
+        var placeholder = document.getElementById('renewal-placeholder');
+
+        if (results.length === 0) {
+            if (placeholder) placeholder.classList.remove('hidden');
+            if (tableWrapper) tableWrapper.classList.add('hidden');
+            return;
+        }
+
+        if (placeholder) placeholder.classList.add('hidden');
+        if (tableWrapper) tableWrapper.classList.remove('hidden');
+
+        var rowsHtml = '';
+        for (var z = 0; z < results.length; z++) {
+            var row = results[z];
+            var statusBadge = '';
+            if (row.status === 'RENOVOU') statusBadge = '🔄 RENOVOU';
+            else if (row.status === 'NÃO RENOVOU') statusBadge = '❌ NÃO RENOVOU';
+            else statusBadge = '⭐ NOVO';
+
+            var matchBadge = (row.matchType && row.matchType !== '-') ? '📇 ' + row.matchType + '' : '-';
+            var nomeExibicao = (row.clientPrev && row.clientPrev !== 'Não presente') ? row.clientPrev : (row.clientCurrent || '-');
+            
+            rowsHtml += '' +
+                '' + (z + 1) + '' +
+                '' + nomeExibicao + '' +
+                '' + (row.doc || '-') + '' +
+                '' + (row.namePrev || '-') + '' +
+                '' + (row.nameCurrent || '-') + '' +
+                '' + matchBadge + '' +
+                '' + statusBadge + '' +
+                '';
+        }
+
+        if (tableBody) tableBody.innerHTML = rowsHtml;
+
+    } catch (erro) { console.error("Erro ao renderizar renovações:", erro); }
+}
 
 
     </script>
