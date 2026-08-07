@@ -6732,27 +6732,33 @@ window.sendChatMessage = async function() {
     const text = input.value.trim();
     if (!text || !state.currentUser) return;
 
-    const activeConv = state.chat ? state.chat.activeConversation : null;
-    if (!activeConv) {
-        if (typeof showToast === 'function') showToast('Selecione um contato primeiro.', 'error');
-        return;
-    }
-
-    // Apenas limpa prefixos 'u-' se houver, mas respeita IDs como '_dev_master'
     const sanitize = id => String(id || '').replace(/^u-/, '').trim();
     const myId = sanitize(state.currentUser.id);
+    const activeConv = state.chat ? state.chat.activeConversation : null;
 
     let otherId = '';
-    if (state.chat && state.chat.selectedContact && state.chat.selectedContact.id) {
+    
+    // 1. Tenta pegar do contato que está ativamente selecionado na tela
+    if (state.chat?.selectedContact?.id) {
         otherId = sanitize(state.chat.selectedContact.id);
-    } else {
-        const parts = activeConv.split('_').map(sanitize);
+    }
+    
+    // 2. Se falhar, tenta extrair da chave da conversa (ignorando o meu próprio ID)
+    if (!otherId || otherId === myId) {
+        const parts = (activeConv || '').split('_').map(sanitize);
         otherId = parts.find(p => p && p !== myId) || '';
     }
 
-    if (!otherId) {
-        if (typeof showToast === 'function') showToast('Erro ao identificar o contato.', 'error');
-        return;
+    // 3. Se AINDA der erro (Efeito Espelho), tenta forçar o envio para o Desenvolvedor
+    if (!otherId || otherId === myId) {
+        const admin = state.users?.find(u => String(u.role).toLowerCase() === 'admin' || String(u.id).includes('dev_master'));
+        if (admin) otherId = sanitize(admin.id);
+    }
+
+    // 4. Trava de Segurança Máxima: Se tudo falhar, bloqueia o envio e avisa o usuário
+    if (!otherId || otherId === myId) {
+        if (typeof showToast === 'function') showToast('Por favor, clique no contato na lista à esquerda novamente.', 'error');
+        return; 
     }
 
     const msgPayload = {
@@ -6766,6 +6772,7 @@ window.sendChatMessage = async function() {
 
     input.value = '';
 
+    // Envia para o Supabase
     const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
     if (db && typeof db.from === 'function') {
         try {
@@ -6777,6 +6784,7 @@ window.sendChatMessage = async function() {
         }
     }
 
+    // Renderiza localmente a mensagem na hora
     const convKey = [myId, otherId].sort().join('_');
     if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
     state.chat.messages[convKey].push({
