@@ -9219,7 +9219,9 @@ function sanitizeDoc(doc) {
     if (!doc) return '';
     return String(doc).replace(/\D/g, ''); // Deixa SOMENTE os números do CPF/CNPJ
 }
-
+function renderRenewalComparison() {
+    processarComparativoRenovacao();
+}
 // 2. Lógica Principal de Processamento
 function processarComparativoRenovacao() {
     const prev = state.renewalComparison.prevData || [];
