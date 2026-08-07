@@ -6682,7 +6682,6 @@ async function fetchReceitaFederalBulk(data, type) {
     const text = input.value.trim();
     if (!text || !state.currentUser) return;
 
-    // Obtém o usuário de destino a partir do estado do chat
     const activeConv = state.chat ? state.chat.activeConversation : null;
     if (!activeConv) {
         if (typeof showToast === 'function') showToast('Selecione um contato primeiro.', 'error');
@@ -6709,13 +6708,17 @@ async function fetchReceitaFederalBulk(data, type) {
     if (db && typeof db.from === 'function') {
         try {
             const { error } = await db.from('chat_messages').insert([msgPayload]);
-            if (error) console.error("Erro Supabase Chat:", error);
+            if (error) {
+                console.error("Erro RLS no Supabase Chat:", error);
+                if (typeof showToast === 'function') showToast("Erro de permissão ao enviar: " + error.message, "error");
+                return;
+            }
         } catch (e) {
-            console.error("Erro na requisição do chat:", e);
+            console.error("Erro de conexão no chat:", e);
         }
     }
 
-    // Atualização local imediata
+    // Atualiza a tela do remetente localmente
     if (!state.chat.messages[activeConv]) state.chat.messages[activeConv] = [];
     state.chat.messages[activeConv].push({
         id: msgPayload.id,
