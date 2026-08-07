@@ -9191,25 +9191,50 @@ function sanitizeDoc(doc) {
 }
 
 // 3. Extratores Cão Farejador (Procura por sinônimos)
+// 3. Extratores Inteligentes Atualizados
 function extractNome(item) {
-    if (!item) return '';
+    if (!item || typeof item !== 'object') return '';
     const keys = Object.keys(item);
+    
+    // Tenta encontrar por palavra-chave conhecida
     const key = keys.find(k => {
         const kl = String(k).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         return kl.includes('nome') || kl.includes('cliente') || kl.includes('razao') || 
                kl.includes('fantasia') || kl.includes('empresa') || kl.includes('sacado') || 
-               kl.includes('titular') || kl.includes('favorecido') || kl.includes('descricao');
+               kl.includes('titular') || kl.includes('favorecido') || kl.includes('pagador') ||
+               kl.includes('tomador') || kl.includes('comprador') || kl.includes('descricao');
     });
-    return key ? String(item[key]) : '';
+    
+    if (key && item[key]) return String(item[key]).trim();
+
+    // FALLBACK: Se não achou por palavra-chave, pega o primeiro valor que seja texto e não seja só números/CPF/CNPJ
+    const firstTextKey = keys.find(k => {
+        const val = String(item[k]).trim();
+        const cleanVal = val.replace(/\D/g, '');
+        // Não é número puro e não é documento
+        return val.length > 2 && cleanVal.length !== val.length && !val.toLowerCase().includes('cpf');
+    });
+
+    return firstTextKey ? String(item[firstTextKey]).trim() : '';
 }
+
 function extractDoc(item) {
-    if (!item) return '';
+    if (!item || typeof item !== 'object') return '';
     const keys = Object.keys(item);
     const key = keys.find(k => {
         const kl = String(k).toLowerCase();
-        return kl.includes('cpf') || kl.includes('cnpj') || kl.includes('doc');
+        return kl.includes('cpf') || kl.includes('cnpj') || kl.includes('doc') || kl.includes('inscricao') || kl.includes('registro');
     });
-    return key ? String(item[key]) : '';
+    
+    if (key && item[key]) return String(item[key]).trim();
+
+    // FALLBACK: Pega qualquer valor que tenha 11 ou 14 dígitos (CPF/CNPJ)
+    const docKey = keys.find(k => {
+        const clean = String(item[k]).replace(/\D/g, '');
+        return clean.length === 11 || clean.length === 14;
+    });
+
+    return docKey ? String(item[docKey]).trim() : '';
 }
 
 // 4. Lógica Principal de Processamento
