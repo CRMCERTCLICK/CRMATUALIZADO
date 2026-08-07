@@ -9224,7 +9224,7 @@ function processarComparativoRenovacao() {
     if (prev.length === 0 || curr.length === 0) return;
 
     const loader = document.getElementById('renewal-processing-indicator');
-    if(loader) loader.classList.remove('hidden');
+    if (loader) loader.classList.remove('hidden');
 
     setTimeout(() => {
         let renewedCount = 0; let notRenewedCount = 0; let newCount = 0;
@@ -9336,30 +9336,21 @@ function processarComparativoRenovacao() {
             }
         });
 
-        desenharTabelaNova2026(comparisonResults);
+        renderizarTabelaFinal(comparisonResults);
         if(loader) loader.classList.add('hidden');
         
     }, 500);
 }
 
-function desenharTabelaNova2026(resultados) {
+function renderizarTabelaFinal(resultados) {
+    const tbody = document.getElementById('renewal-table-body');
     const wrapper = document.getElementById('renewal-table-wrapper');
-    if (!wrapper) return;
+    const placeholder = document.getElementById('renewal-placeholder');
 
-    // O SEGREDO ESTÁ AQUI: Ignorar a div defeituosa e buscar a tag  real
-    let table = wrapper.querySelector('table');
-    if (!table) {
-        table = document.createElement('table');
-        table.className = "w-full text-left";
-        wrapper.appendChild(table);
-    }
+    if (placeholder) placeholder.classList.add('hidden');
+    if (wrapper) wrapper.classList.remove('hidden');
 
-    // Pega o TBODY estrutural e real da tabela, ou cria um novo
-    let tbody = table.querySelector('tbody');
-    if (!tbody) {
-        tbody = document.createElement('tbody');
-        table.appendChild(tbody);
-    }
+    if (!tbody) return;
 
     let html = '';
     resultados.forEach((r) => {
@@ -9380,21 +9371,18 @@ function desenharTabelaNova2026(resultados) {
 
         html += `
             
+                ${r.id}
+                ${r.cliente}
+                ${r.documento}
+                ${r.nomePrev}
+                ${r.nomeCurr}
+                ${matchIcon}
+                ${badgeText}
+            
         `;
     });
 
-    // Injeta as colunas DE FATO dentro da Tabela
     tbody.innerHTML = html;
-
-    // Limpeza: Esconde a "div expulsa" que causou toda essa dor de cabeça
-    const divBugada = document.getElementById('renewal-table-body');
-    if (divBugada && divBugada.tagName !== 'TBODY') {
-        divBugada.style.display = 'none';
-    }
-
-    wrapper.classList.remove('hidden');
-    const placeholder = document.getElementById('renewal-placeholder');
-    if (placeholder) placeholder.classList.add('hidden');
 }
 
     </script>
