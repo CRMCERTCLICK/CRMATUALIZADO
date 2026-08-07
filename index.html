@@ -9588,12 +9588,11 @@ function renderizarTabelaFinal(resultados) {
 // Verifica se o link é o do contador
 if (new URLSearchParams(window.location.search).get('reg') === 'contador') {
     
-    // Injeta o estilo forçando tudo a sumir, menos o formulário e as notificações de erro
+    // 1. Injeta o estilo forçando tudo a sumir, menos o formulário
     const style = document.createElement('style');
     style.innerHTML = `
         body { visibility: hidden !important; background-color: #0f172a !important; }
         #accountant-modal, #accountant-modal * { visibility: visible !important; }
-        #toast-container, #toast-container *, .toast, .noty-layout { visibility: visible !important; }
         
         #accountant-modal { 
             display: flex !important; position: fixed !important; top: 0 !important; left: 0 !important; 
@@ -9606,12 +9605,51 @@ if (new URLSearchParams(window.location.search).get('reg') === 'contador') {
     `;
     document.head.appendChild(style);
 
-    // Substitui a função de fechar pela tela de SUCESSO VERDE
-    window.closeAccountantModal = function() {
+    // 2. SUBSTITUI A FUNÇÃO DE SALVAR INTEIRA PARA NÃO DEPENDER DO CRM
+    window.saveAccountant = async function(e) {
+        if (e) e.preventDefault();
+        
+        const name = document.getElementById('acc-name').value.trim();
+        const crc = document.getElementById('acc-crc').value.trim();
+        const phone = document.getElementById('acc-phone').value.trim();
+
+        if (!name) {
+            alert("Por favor, preencha o Nome!"); // Usa o alert padrão para garantir que ele veja
+            return;
+        }
+
+        const accData = {
+            id: 'acc-' + Date.now(),
+            name: name,
+            crc: crc,
+            phone: phone,
+            syngularReferrals: 0,
+            syngularVouchers: [],
+            registeredViaLink: true,
+            registeredAt: new Date().toISOString()
+        };
+
+        const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+        
+        if (db && typeof db.from === 'function') {
+            try {
+                // Envia direto para o Supabase
+                const { error } = await db.from('accountants').insert([accData]);
+                if (error) {
+                    alert("Erro ao salvar no banco: " + error.message);
+                    return;
+                }
+            } catch (err) {
+                alert("Erro de conexão ao salvar.");
+                return;
+            }
+        }
+
+        // 3. Exibe a tela de Sucesso IMEDIATAMENTE (sem atualizar o CRM no fundo)
         document.body.innerHTML = '<div style="visibility: visible; color: #34d399; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; background: #0f172a; width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; z-index: 99999999;"> <h1 style="font-size: 32px; font-weight: bold; margin-bottom: 10px;">✓ Cadastro Concluído!</h1> <p style="color: #94a3b8;">Seus dados foram salvos com sucesso. Pode fechar esta página.</p> </div>';
     };
 
-    // Puxa o formulário imediatamente para a tela
+    // 4. Puxa o formulário para a tela
     setTimeout(() => {
         if (typeof openAccountantModal === 'function') {
             openAccountantModal();
