@@ -6905,6 +6905,22 @@ async function fetchReceitaFederalBulk(data, type) {
             }
 
             function renderChatMessages() {
+                // --- INÍCIO DA BLINDAGEM DE CONTATO ---
+    if (state.chat && state.chat.activeConversation) {
+        if (!state.chat.selectedContact || !state.chat.selectedContact.name) {
+            const isDev = state.chat.activeConversation.includes('master') || state.chat.activeConversation.includes('dev');
+            state.chat.selectedContact = { 
+                id: isDev ? 'master' : 'unknown', 
+                name: isDev ? 'Desenvolvedor Master' : 'Usuário',
+                role: 'admin'
+            };
+            
+            // Força a atualização do título se ele tiver travado
+            const headerTitle = document.querySelector('.chat-header h2, #chat-header-title, header h2');
+            if (headerTitle) headerTitle.textContent = state.chat.selectedContact.name;
+        }
+    }
+    // --- FIM DA BLINDAGEM ---
                 const container = document.getElementById('chat-messages-container');
                 if (!container) return;
                 const activeConv = state.chat.activeConversation;
