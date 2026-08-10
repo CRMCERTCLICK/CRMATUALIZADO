@@ -6902,50 +6902,48 @@ window.sendChatMessage = async function() {
                 }).join('');
             }
 
-            function renderChatMessages() {
-          // --- INÍCIO DA BLINDAGEM DE CONTATO ---
-    if (state.chat && state.chat.activeConversation) {
-        if (!state.chat.selectedContact || !state.chat.selectedContact.name) {
-            const myId = String(state.currentUser?.id || '').replace(/^u-/, '').trim();
-            const parts = state.chat.activeConversation.split('_');
-            const otherId = parts.find(p => p !== myId) || parts[0];
+      function renderChatMessages() {
+    const container = document.getElementById('chat-messages-container');
+    if (!container) return;
 
-            let foundUser = state.users ? state.users.find(u => String(u.id).replace(/^u-/, '').trim() === otherId) : null;
-            
-            if (foundUser) {
-                state.chat.selectedContact = foundUser;
-            } else {
-                state.chat.selectedContact = { 
-                    id: otherId, 
-                    name: otherId === '_dev_master' ? 'Desenvolvedor Master' : 'Usuário',
-                    role: otherId === '_dev_master' ? 'admin' : 'user'
-                };
-            }
-            
-            const headerTitle = document.querySelector('.chat-header h2, #chat-header-title, header h2');
-            if (headerTitle) headerTitle.textContent = state.chat.selectedContact.name;
-        }
+    // Se não houver conversa ativa, garante a tela de placeholder
+    if (!state.chat.activeConversation) {
+        document.getElementById('chat-header-name').textContent = 'Selecione um contato';
+        document.getElementById('chat-header-avatar').textContent = '?';
+        document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300";
+        document.getElementById('chat-header-status').textContent = 'Offline';
+        return;
     }
 
-    // --- FIM DA BLINDAGEM ---
-                const container = document.getElementById('chat-messages-container');
-                if (!container) return;
-                const activeConv = state.chat.activeConversation;
-                if (!activeConv) {
-                    container.innerHTML =
-                        `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment-dots text-2xl text-slate-700 mb-2 block"></i><p>Selecione um contato para iniciar a conversa.</p></div>`;
-                    return;
-                }
-                const messages = getChatMessages(activeConv);
-                if (!messages.length) {
-                    container.innerHTML =
-                        `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment text-2xl text-slate-700 mb-2 block"></i><p>Nenhuma mensagem ainda. Envie uma mensagem!</p></div>`;
-                    return;
-                }
-                const parts = activeConv.split('_');
-                const otherId = parts[0] === state.currentUser.id ? parts[1] : parts[0];
-                const otherUser = state.users.find(u => u.id === otherId);
-                const otherName = otherUser ? otherUser.name : 'Usuário';
+    // 1. Descobre o ID do outro usuário isolando o ID atual
+    const myId = String(state.currentUser.id);
+    let otherId = state.chat.activeConversation.replace(myId, '').replace(/^_|_$/g, '');
+    
+    // 2. Proteção caso seja o Dev Master
+    if (otherId.includes('dev_master')) {
+        otherId = 'usr_dev_master';
+    }
+
+    // 3. Busca o usuário na lista ou cria um fallback de segurança
+    let otherUser = state.users.find(u => String(u.id) === otherId);
+    if (!otherUser) {
+        otherUser = { 
+            name: otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário ' + otherId.substring(0,4) 
+        };
+    }
+
+    // 4. ATUALIZA O DOM COM OS IDs CORRETOS DO SEU HTML
+    const headerName = document.getElementById('chat-header-name');
+    const headerAvatar = document.getElementById('chat-header-avatar');
+    const headerStatus = document.getElementById('chat-header-status');
+
+    if (headerName && headerAvatar && headerStatus) {
+        headerName.textContent = otherUser.name;
+        headerAvatar.textContent = otherUser.name.charAt(0).toUpperCase();
+        headerStatus.textContent = 'Online';
+        headerAvatar.className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
+    }
+
                 container.innerHTML = messages.map(msg => {
             // Usa o mesmo tradutor para os balões na tela
         const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
