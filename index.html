@@ -6902,7 +6902,7 @@ window.sendChatMessage = async function() {
                 }).join('');
             }
 
-     function renderChatMessages() {
+   function renderChatMessages() {
     const container = document.getElementById('chat-messages-container');
     if (!container) return;
 
@@ -6910,10 +6910,18 @@ window.sendChatMessage = async function() {
 
     // 1. Tela vazia se nenhuma conversa estiver selecionada
     if (!activeConv) {
-        document.getElementById('chat-header-name').textContent = 'Selecione um contato';
-        document.getElementById('chat-header-avatar').textContent = '?';
-        document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300";
-        document.getElementById('chat-header-status').textContent = 'Offline';
+        const headerName = document.getElementById('chat-header-name');
+        if (headerName) headerName.textContent = 'Selecione um contato';
+        
+        const headerAvatar = document.getElementById('chat-header-avatar');
+        if (headerAvatar) {
+            headerAvatar.textContent = '?';
+            headerAvatar.className = "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300";
+        }
+        
+        const headerStatus = document.getElementById('chat-header-status');
+        if (headerStatus) headerStatus.textContent = 'Offline';
+        
         container.innerHTML = `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment-dots text-2xl mb-2 block"></i><p>Selecione um contato para iniciar a conversa.</p></div>`;
         return;
     }
@@ -6943,16 +6951,19 @@ window.sendChatMessage = async function() {
         document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
     }
 
-    // 5. Carrega o histórico de mensagens dessa conversa
-    const messages = state.chat.messages[activeConv] || [];
+    // 5. CARREGA AS MENSAGENS (A linha que estava faltando!)
+    let messages = state.chat.messages[activeConv];
+    if (!messages) {
+        messages = [];
+    }
 
     // Se não houver mensagens, exibe aviso
-    if (!messages.length) {
+    if (messages.length === 0) {
         container.innerHTML = `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment text-2xl mb-2 block"></i><p>Nenhuma mensagem enviada.</p></div>`;
         return;
     }
 
-    // 6. Renderiza os balões de mensagens
+    // 6. Renderiza os balões de mensagens na tela
     container.innerHTML = messages.map(msg => {
         // Normaliza os IDs para comparação
         const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
