@@ -1791,10 +1791,14 @@
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-1">
-                                    <button id="chat-close-btn" onclick="switchTab('dashboard')" class="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition-all" title="Fechar chat">
-                                        <i class="fas fa-times text-xs"></i>
-                                    </button>
-                                </div>
+                                    <div class="flex items-center gap-1">
+    <button onclick="clearCurrentConversation()" class="p-1.5 text-rose-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-all" title="Limpar conversa">
+        <i class="fas fa-trash text-xs"></i>
+    </button>
+    <button id="chat-close-btn" onclick="switchTab('dashboard')" class="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition-all" title="Fechar chat">
+        <i class="fas fa-times text-xs"></i>
+    </button>
+</div>
                             </div>
                             <div class="flex-1 overflow-y-auto p-4 space-y-2" id="chat-messages-container">
                                 <div class="text-center text-slate-500 text-xs py-12">
@@ -3182,7 +3186,42 @@ function subscribeSupabaseRealtime() {
     }
 });
 
-        window.realtimeChannel.subscribe();
+    window.realtimeChannel.subscribe();
+
+        // === NOVO: SISTEMA DE PRESENÇA (ONLINE/OFFLINE) ===
+        window.onlineUsers = new Set();
+        const dbPresence = window.supabaseClient || window.supabase;
+        
+        if (dbPresence && typeof dbPresence.channel === 'function' && !window.presenceChannel) {
+            window.presenceChannel = dbPresence.channel('online-users');
+            
+            window.presenceChannel.on('presence', { event: 'sync' }, () => {
+                const presenceState = window.presenceChannel.presenceState();
+                window.onlineUsers.clear();
+                
+                for (const key in presenceState) {
+                    presenceState[key].forEach(p => {
+                        if (p.user) window.onlineUsers.add(String(p.user));
+                    });
+                }
+                
+                if (state.currentTab === 'chat') {
+                    if (typeof renderChatContacts === 'function') renderChatContacts();
+                    if (state.chat.activeConversation && typeof renderChatMessages === 'function') renderChatMessages();
+                }
+            });
+
+            window.presenceChannel.subscribe(async (status) => {
+                if (status === 'SUBSCRIBED' && state.currentUser) {
+                    const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
+                    const myCleanId = normalizeDev(String(state.currentUser.id || '').replace(/^u-/, '').trim());
+                    
+                    await window.presenceChannel.track({ user: myCleanId });
+                }
+            });
+        }
+        // === FIM DO NOVO BLOCO ===
+
     } catch (e) {
         console.warn("Realtime sync warning:", e);
     }
@@ -6942,16 +6981,23 @@ window.sendChatMessage = async function() {
     }
     const otherName = otherUser.name;
 
-    // 4. Atualiza visualmente o cabeçalho do chat
+    // 4. Atualiza visualmente o cabeçalho do chat e o STATUS ONLINE
     const headerName = document.getElementById('chat-header-name');
     if (headerName) {
         headerName.textContent = otherName;
         document.getElementById('chat-header-avatar').textContent = otherName.charAt(0).toUpperCase();
-        document.getElementById('chat-header-status').textContent = 'Online';
         document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
+        
+        // --- CÓDIGO DO ONLINE/OFFLINE AQUI ---
+        const isOnline = window.onlineUsers && window.onlineUsers.has(otherId);
+        const statusEl = document.getElementById('chat-header-status');
+        if (statusEl) {
+            statusEl.textContent = isOnline ? 'Online' : 'Offline';
+            statusEl.className = isOnline ? 'text-[10px] text-emerald-400 font-bold' : 'text-[10px] text-slate-500';
+        }
     }
 
-    // 5. CARREGA AS MENSAGENS (A linha que estava faltando!)
+    // 5. CARREGA AS MENSAGENS
     let messages = state.chat.messages[activeConv];
     if (!messages) {
         messages = [];
@@ -6984,6 +7030,46 @@ window.sendChatMessage = async function() {
     
     // 7. Rola o chat para a última mensagem automaticamente
     setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
+
+async function clearCurrentConversation() {
+    if (!state.chat.activeConversation) return;
+    
+    // Confirmação de segurança
+    const confirmed = confirm("Tem certeza que deseja apagar permanentemente todas as mensagens desta conversa? Isso limpará o histórico para ambos os usuários.");
+    if (!confirmed) return;
+
+    // Normalizador de ID (para tratar o dev_master)
+    const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
+
+    const myId = normalizeDev(String(state.currentUser.id || '').replace(/^u-/, '').trim());
+    const convKey = state.chat.activeConversation;
+    const otherId = normalizeDev(convKey.replace(myId, '').replace(/^_|_$/g, ''));
+    
+    // 1. Apaga do banco de dados (Supabase)
+    const db = window.supabaseClient || window.supabase;
+    if (db && typeof db.from === 'function') {
+        try {
+            // Deleta todas as mensagens onde eu sou remetente e ele destinatário OU vice-versa
+            const { error } = await db.from('chat_messages')
+                .delete()
+                .or(`and(sender_id.eq.${myId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${myId})`);
+                
+            if (error) throw error;
+        } catch (err) {
+            console.error("Erro ao apagar mensagens no Supabase:", err);
+            showToast("Erro ao apagar histórico no servidor.", "error");
+            return;
+        }
+    }
+
+    // 2. Apaga da memória local (state)
+    state.chat.messages[convKey] = [];
+    if (typeof saveChatState === 'function') saveChatState();
+    
+    // 3. Atualiza a tela
+    renderChatMessages();
+    if (typeof showToast === 'function') showToast("Conversa limpa com sucesso!");
 }
 
             function updateChatUnreadBadge() {
