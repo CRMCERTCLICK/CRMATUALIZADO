@@ -6902,68 +6902,78 @@ window.sendChatMessage = async function() {
                 }).join('');
             }
 
-      function renderChatMessages() {
+     function renderChatMessages() {
     const container = document.getElementById('chat-messages-container');
     if (!container) return;
 
-    // Se não houver conversa ativa, garante a tela de placeholder
-    if (!state.chat.activeConversation) {
+    const activeConv = state.chat.activeConversation;
+
+    // 1. Tela vazia se nenhuma conversa estiver selecionada
+    if (!activeConv) {
         document.getElementById('chat-header-name').textContent = 'Selecione um contato';
         document.getElementById('chat-header-avatar').textContent = '?';
         document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300";
         document.getElementById('chat-header-status').textContent = 'Offline';
+        container.innerHTML = `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment-dots text-2xl mb-2 block"></i><p>Selecione um contato para iniciar a conversa.</p></div>`;
         return;
     }
 
-    // 1. Descobre o ID do outro usuário isolando o ID atual
+    // 2. Descobre quem é o outro usuário removendo o NOSSO ID
     const myId = String(state.currentUser.id);
-    let otherId = state.chat.activeConversation.replace(myId, '').replace(/^_|_$/g, '');
+    let otherId = activeConv.replace(myId, '').replace(/^_|_$/g, '');
     
-    // 2. Proteção caso seja o Dev Master
+    // Proteção para o ID do Dev Master
     if (otherId.includes('dev_master')) {
         otherId = 'usr_dev_master';
     }
 
-    // 3. Busca o usuário na lista ou cria um fallback de segurança
+    // 3. Busca os dados do contato (com fallback de segurança)
     let otherUser = state.users.find(u => String(u.id) === otherId);
     if (!otherUser) {
-        otherUser = { 
-            name: otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário ' + otherId.substring(0,4) 
-        };
+        otherUser = { name: otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário' };
     }
+    const otherName = otherUser.name;
 
-    // 4. ATUALIZA O DOM COM OS IDs CORRETOS DO SEU HTML
+    // 4. Atualiza visualmente o cabeçalho do chat
     const headerName = document.getElementById('chat-header-name');
-    const headerAvatar = document.getElementById('chat-header-avatar');
-    const headerStatus = document.getElementById('chat-header-status');
-
-    if (headerName && headerAvatar && headerStatus) {
-        headerName.textContent = otherUser.name;
-        headerAvatar.textContent = otherUser.name.charAt(0).toUpperCase();
-        headerStatus.textContent = 'Online';
-        headerAvatar.className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
+    if (headerName) {
+        headerName.textContent = otherName;
+        document.getElementById('chat-header-avatar').textContent = otherName.charAt(0).toUpperCase();
+        document.getElementById('chat-header-status').textContent = 'Online';
+        document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
     }
 
-                container.innerHTML = messages.map(msg => {
-            // Usa o mesmo tradutor para os balões na tela
+    // 5. Carrega o histórico de mensagens dessa conversa
+    const messages = state.chat.messages[activeConv] || [];
+
+    // Se não houver mensagens, exibe aviso
+    if (!messages.length) {
+        container.innerHTML = `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment text-2xl mb-2 block"></i><p>Nenhuma mensagem enviada.</p></div>`;
+        return;
+    }
+
+    // 6. Renderiza os balões de mensagens
+    container.innerHTML = messages.map(msg => {
+        // Normaliza os IDs para comparação
         const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
         
-        const myCleanId = normalizeDev(String(state.currentUser?.id || '').replace(/^u-/, '').trim());
+        const myCleanId = normalizeDev(String(state.currentUser.id || '').replace(/^u-/, '').trim());
         const msgFromClean = normalizeDev(String(msg.from || msg.sender_id || '').replace(/^u-/, '').trim());
         
         const isSent = msgFromClean === myCleanId;
+        const time = typeof formatDateBR === 'function' ? formatDateBR(msg.timestamp) : (msg.timestamp || '');
         
-        const senderName = isSent ? 'Você' : otherName;
-        const time = typeof formatDateBR === 'function' ? formatDateBR(msg.timestamp) : msg.timestamp;
-                    return `<div class="flex flex-col ${isSent ? 'items-end' : 'items-start'}">
-                        <div class="chat-message ${isSent ? 'sent' : 'received'} rounded-xl px-3 py-2 text-sm max-w-[75%]">
-                            <p class="whitespace-pre-wrap break-words">${escapeHTML(msg.text)}</p>
-                            <div class="time text-right text-[8px] opacity-60 mt-1">${time}</div>
-                        </div>
-                    </div>`;
-                }).join('');
-                setTimeout(() => container.scrollTop = container.scrollHeight, 50);
-            }
+        return `<div class="flex flex-col ${isSent ? 'items-end' : 'items-start'} mb-3">
+            <div class="chat-message ${isSent ? 'sent' : 'received'} rounded-xl px-3 py-2 text-sm max-w-[85%] shadow-sm">
+                <p class="whitespace-pre-wrap break-words">${escapeHTML(msg.text)}</p>
+                <div class="time text-right text-[8px] opacity-60 mt-1">${time}</div>
+            </div>
+        </div>`;
+    }).join('');
+    
+    // 7. Rola o chat para a última mensagem automaticamente
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
 
             function updateChatUnreadBadge() {
                 const totalUnread = Object.values(state.chat.unread).reduce((a, b) => a + b, 0);
