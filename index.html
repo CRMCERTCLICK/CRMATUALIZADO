@@ -3130,51 +3130,57 @@ function subscribeSupabaseRealtime() {
                     }
                 }
             })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
-                const newMsg = payload.new;
-                if (!state.currentUser || !newMsg) return;
+   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+    const newMsg = payload.new;
+    if (!state.currentUser || !newMsg) return;
 
-                const sanitize = id => String(id || '').replace(/^u-/, '').trim();
-                const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
+    const sanitize = id => String(id || '').replace(/^u-/, '').trim();
+    const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
 
-                const myId = normalizeDev(sanitize(state.currentUser.id));
-                const senderId = normalizeDev(sanitize(newMsg.sender_id));
-                const receiverId = normalizeDev(sanitize(newMsg.receiver_id));
+    const myId = normalizeDev(sanitize(state.currentUser.id));
+    const senderId = normalizeDev(sanitize(newMsg.sender_id));
+    const receiverId = normalizeDev(sanitize(newMsg.receiver_id));
 
-                console.log(`🔍 Realtime Unificado: Eu [${myId}] | De [${senderId}] | Para [${receiverId}]`);
+    console.log(`🔍 Realtime Unificado: Eu [${myId}] | De [${senderId}] | Para [${receiverId}]`);
 
-                if (receiverId === myId || senderId === myId) {
-                    const otherId = senderId === myId ? receiverId : senderId;
-                    const convKey = [myId, otherId].sort().join('_');
+    if (receiverId === myId || senderId === myId) {
+        const otherId = senderId === myId ? receiverId : senderId;
+        const convKey = [myId, otherId].sort().join('_');
 
-                    if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
-                    if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
+        if (!state.chat) state.chat = { messages: {}, unread: {}, activeConversation: null };
+        if (!state.chat.messages[convKey]) state.chat.messages[convKey] = [];
 
-                    if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
-                        state.chat.messages[convKey].push({
-                            id: newMsg.id,
-                            from: senderId, // Mantém o remetente original unificado
-                            to: receiverId,
-                            text: newMsg.text,
-                            timestamp: newMsg.created_at,
-                            read: senderId !== myId ? false : true
-                        });
-                    }
-
-                    if (!state.chat.activeConversation && receiverId === myId) {
-                        state.chat.activeConversation = convKey;
-                    }
-
-                    if (senderId !== myId && state.chat.activeConversation !== convKey) {
-                        state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
-                        document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => el.classList.add('chat-notify-ping'));
-                    }
-
-                    if (typeof renderChatMessages === 'function') renderChatMessages();
-                    if (typeof renderChatContacts === 'function') renderChatContacts();
-                    if (typeof renderChatContactsSidebar === 'function') renderChatContactsSidebar();
-                }
+        // Adiciona a mensagem à memória se não for duplicada
+        if (!state.chat.messages[convKey].some(m => m.id === newMsg.id)) {
+            state.chat.messages[convKey].push({
+                id: newMsg.id,
+                from: senderId,
+                to: receiverId,
+                text: newMsg.text,
+                timestamp: newMsg.created_at,
+                read: senderId !== myId ? false : true
             });
+        }
+
+        // 🚨 CORREÇÃO DOS PASSOS 1 E 3 AQUI 🚨
+        // Se a mensagem for de outra pessoa e o chat não estiver aberto na tela,
+        // apenas atualizamos o contador de não lidas e disparamos o aviso visual.
+        if (senderId !== myId && state.chat.activeConversation !== convKey) {
+            state.chat.unread[convKey] = (state.chat.unread[convKey] || 0) + 1;
+            document.querySelectorAll('header [onclick*="chat"], .sidebar [onclick*="chat"], [data-tab="chat"]').forEach(el => el.classList.add('chat-notify-ping'));
+        }
+
+        // Atualiza a interface APENAS se o chat atual for o mesmo de onde veio a mensagem.
+        // Isso evita que a interface tente renderizar sem os dados do cabeçalho preenchidos.
+        if (typeof renderChatMessages === 'function' && state.chat.activeConversation === convKey) {
+            renderChatMessages();
+        }
+        
+        // Atualiza a barra lateral de contatos independentemente
+        if (typeof renderChatContacts === 'function') renderChatContacts();
+        if (typeof renderChatContactsSidebar === 'function') renderChatContactsSidebar();
+    }
+});
 
         window.realtimeChannel.subscribe();
     } catch (e) {
