@@ -6907,40 +6907,68 @@ window.sendChatMessage = async function() {
 }
 
             function renderChatContacts() {
-                const list = document.getElementById('chat-contact-list');
-                if (!list) return;
-                const contacts = getChatContacts();
-                document.getElementById('chat-contacts-count').textContent = contacts.length;
-                if (!contacts.length) { list.innerHTML =
-                        '<p class="text-xs text-slate-500 text-center py-8">Nenhum contato disponível.</p>'; return; }
-                list.innerHTML = contacts.map(c => {
-                    const isActive = state.chat.activeConversation === c.convId;
-                    const lastMsgPreview = c.lastMsg ? c.lastMsg.text.substring(0, 30) + (c.lastMsg.text
-                        .length > 30 ? '...' : '') : 'Nenhuma mensagem';
-                    const time = c.lastMsg ? formatDateShort(c.lastMsg.timestamp) : '';
-                    const unreadBadge = c.unread > 0 ?
-                        `<span class="chat-unread-badge">${c.unread}</span>` : '';
-                    const avatar = c.user.avatar ?
-                        `<img src="${c.user.avatar}" class="w-8 h-8 rounded-full object-cover">` :
-                        `<div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">${c.user.name.charAt(0).toUpperCase()}</div>`;
-                    const activeClass = isActive ? 'bg-brand-500/10 border border-brand-500/20' : '';
-                    return `<div class="chat-user-item p-2 rounded-xl cursor-pointer hover:bg-slate-800/30 transition-colors ${activeClass}" onclick="selectChatContact('${c.convId}')">
-                        <div class="flex items-center gap-3">
-                            ${avatar}
-                            <div class="flex-1 min-w-0">
-                                <div class="flex justify-between items-center">
-                                    <span class="font-bold text-sm text-slate-200 truncate">${escapeHTML(c.user.name)}</span>
-                                    <span class="text-[9px] text-slate-500 font-mono">${time}</span>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-xs text-slate-400 truncate">${escapeHTML(lastMsgPreview)}</span>
-                                    ${unreadBadge}
-                                </div>
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
+    const list = document.getElementById('chat-contact-list');
+    const countSpan = document.getElementById('chat-contacts-count');
+    if (!list) return;
+
+    // 1. Descobre quem sou eu
+    const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
+    const myCleanId = normalizeDev(String(state.currentUser.id || '').replace(/^u-/, '').trim());
+
+    // 2. Pega todos os usuários do sistema (menos eu mesmo) para a lista
+    let availableUsers = state.users.filter(u => {
+        const uId = normalizeDev(String(u.id || '').replace(/^u-/, '').trim());
+        return uId !== myCleanId;
+    });
+
+    if (countSpan) countSpan.textContent = availableUsers.length;
+
+    if (availableUsers.length === 0) {
+        list.innerHTML = `<p class="text-xs text-slate-500 text-center py-8">Nenhum usuário disponível.</p>`;
+        return;
+    }
+
+    // 3. Monta a lista visual de contatos com a bolinha de Online/Offline
+    list.innerHTML = availableUsers.map(u => {
+        const uId = normalizeDev(String(u.id || '').replace(/^u-/, '').trim());
+        const convKey = [myCleanId, uId].sort().join('_');
+        
+        // Checa se a pessoa está Online no Supabase (Bolinha Verde)
+        const isOnline = window.onlineUsers && window.onlineUsers.has(uId);
+        const statusDot = isOnline 
+            ? '<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-slate-900 shadow-[0_0_5px_#10b981]" title="Online"></span>' 
+            : '<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-slate-600 border-2 border-slate-900" title="Offline"></span>';
+
+        // Checa a última mensagem e notificações não lidas
+        const msgs = state.chat.messages[convKey] || [];
+        const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1].text : 'Nenhuma mensagem';
+        const unreadCount = state.chat.unread[convKey] || 0;
+        const unreadBadge = unreadCount > 0 ? `<span class="bg-brand-500 text-surface-darker text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-2">${unreadCount}</span>` : '';
+        
+        // Verifica se é a conversa que está aberta agora na tela
+        const isActive = state.chat.activeConversation === convKey;
+        const bgClass = isActive ? 'bg-slate-800/80 border-l-2 border-brand-500' : 'hover:bg-slate-800/40 border-l-2 border-transparent';
+
+        return `
+        <div onclick="selectChatContact('${convKey}')" class="p-2.5 rounded-xl cursor-pointer transition-all ${bgClass} mb-1.5 flex items-center gap-3">
+            <div class="relative shrink-0">
+                <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-300">
+                    ${escapeHTML(u.name.charAt(0).toUpperCase())}
+                </div>
+                ${statusDot}
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-start">
+                    <span class="font-bold text-xs text-slate-200 truncate">${escapeHTML(u.name)}</span>
+                    ${unreadBadge}
+                </div>
+                <div class="text-[10px] text-slate-400 truncate mt-0.5">
+                    ${escapeHTML(lastMsg)}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
 
    function renderChatMessages() {
     const container = document.getElementById('chat-messages-container');
