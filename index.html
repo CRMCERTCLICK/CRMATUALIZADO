@@ -1790,8 +1790,7 @@
                                         <p id="chat-header-status" class="text-[10px] text-slate-500">Offline</p>
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-1">
-                                    <div class="flex items-center gap-1">
+                       <div class="flex items-center gap-1">
     <button onclick="clearCurrentConversation()" class="p-1.5 text-rose-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-all" title="Limpar conversa">
         <i class="fas fa-trash text-xs"></i>
     </button>
@@ -6862,40 +6861,33 @@ window.sendChatMessage = async function() {
                 updateChatUnreadBadge();
             }
 
-       function selectChatContact(conversationId) {
+      function selectChatContact(conversationId) {
     state.chat.activeConversation = conversationId;
     if (state.chat.unread[conversationId]) state.chat.unread[conversationId] = 0;
     
-    // 1. Encontra o ID do outro usuário removendo o NOSSO ID da chave da conversa
-    const myId = state.currentUser.id;
+    const myId = String(state.currentUser.id || '').replace(/^u-/, '').trim();
     let otherId = conversationId.replace(myId, '').replace(/^_|_$/g, ''); 
     
-    // 2. Proteção extra: normaliza o ID do Dev caso venha fragmentado
-    if (['usr', 'dev', 'master', '_dev_master'].includes(otherId) || otherId.includes('dev')) {
+    if (otherId.includes('dev_master') || otherId === 'usr' || otherId === 'dev') {
         otherId = 'usr_dev_master';
     }
 
-    // 3. Busca o usuário
-    const otherUser = state.users.find(u => u.id === otherId);
+    // Busca BLINDADA do usuário (ignora prefixos "u-")
+    let otherUser = state.users.find(u => {
+        if (!u || !u.id) return false;
+        const uid = String(u.id);
+        return uid === otherId || uid === `u-${otherId}` || uid.replace(/^u-/, '') === otherId.replace(/^u-/, '');
+    });
 
-    // 4. Atualiza o cabeçalho (com fallback de segurança)
-    if (otherUser) {
-        document.getElementById('chat-header-name').textContent = otherUser.name;
-        document.getElementById('chat-header-avatar').textContent = otherUser.name.charAt(0).toUpperCase();
-        document.getElementById('chat-header-status').textContent = 'Online';
-        // Ajusta a cor para remover o estado de "desconhecido"
-        document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
-    } else {
-        // Fallback para evitar que fique travado em "? Selecione um contato" se algo der errado
-        const fallbackName = otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário';
-        document.getElementById('chat-header-name').textContent = fallbackName;
-        document.getElementById('chat-header-avatar').textContent = fallbackName.charAt(0);
-        document.getElementById('chat-header-status').textContent = 'Online';
-    }
+    const finalName = otherUser ? otherUser.name : (otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário');
+
+    document.getElementById('chat-header-name').textContent = finalName;
+    document.getElementById('chat-header-avatar').textContent = finalName.charAt(0).toUpperCase();
+    document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
 
     renderChatMessages();
-    renderChatContacts();
-    updateChatUnreadBadge();
+    if (typeof renderChatContacts === 'function') renderChatContacts();
+    if (typeof updateChatUnreadBadge === 'function') updateChatUnreadBadge();
     
     setTimeout(() => { 
         const container = document.getElementById('chat-messages-container'); 
@@ -6947,48 +6939,42 @@ window.sendChatMessage = async function() {
 
     const activeConv = state.chat.activeConversation;
 
-    // 1. Tela vazia se nenhuma conversa estiver selecionada
     if (!activeConv) {
         const headerName = document.getElementById('chat-header-name');
         if (headerName) headerName.textContent = 'Selecione um contato';
-        
         const headerAvatar = document.getElementById('chat-header-avatar');
         if (headerAvatar) {
             headerAvatar.textContent = '?';
             headerAvatar.className = "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300";
         }
-        
         const headerStatus = document.getElementById('chat-header-status');
         if (headerStatus) headerStatus.textContent = 'Offline';
-        
         container.innerHTML = `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment-dots text-2xl mb-2 block"></i><p>Selecione um contato para iniciar a conversa.</p></div>`;
         return;
     }
 
-    // 2. Descobre quem é o outro usuário removendo o NOSSO ID
-    const myId = String(state.currentUser.id);
+    const myId = String(state.currentUser.id || '').replace(/^u-/, '').trim();
     let otherId = activeConv.replace(myId, '').replace(/^_|_$/g, '');
     
-    // Proteção para o ID do Dev Master
-    if (otherId.includes('dev_master')) {
+    if (otherId.includes('dev_master') || otherId === 'usr' || otherId === 'dev') {
         otherId = 'usr_dev_master';
     }
 
-    // 3. Busca os dados do contato (com fallback de segurança)
-    let otherUser = state.users.find(u => String(u.id) === otherId);
-    if (!otherUser) {
-        otherUser = { name: otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário' };
-    }
-    const otherName = otherUser.name;
+    // Busca BLINDADA do usuário
+    let otherUser = state.users.find(u => {
+        if (!u || !u.id) return false;
+        const uid = String(u.id);
+        return uid === otherId || uid === `u-${otherId}` || uid.replace(/^u-/, '') === otherId.replace(/^u-/, '');
+    });
+    
+    const finalName = otherUser ? otherUser.name : (otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário');
 
-    // 4. Atualiza visualmente o cabeçalho do chat e o STATUS ONLINE
     const headerName = document.getElementById('chat-header-name');
     if (headerName) {
-        headerName.textContent = otherName;
-        document.getElementById('chat-header-avatar').textContent = otherName.charAt(0).toUpperCase();
+        headerName.textContent = finalName;
+        document.getElementById('chat-header-avatar').textContent = finalName.charAt(0).toUpperCase();
         document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
         
-        // --- CÓDIGO DO ONLINE/OFFLINE AQUI ---
         const isOnline = window.onlineUsers && window.onlineUsers.has(otherId);
         const statusEl = document.getElementById('chat-header-status');
         if (statusEl) {
@@ -6997,23 +6983,16 @@ window.sendChatMessage = async function() {
         }
     }
 
-    // 5. CARREGA AS MENSAGENS
     let messages = state.chat.messages[activeConv];
-    if (!messages) {
-        messages = [];
-    }
+    if (!messages) messages = [];
 
-    // Se não houver mensagens, exibe aviso
     if (messages.length === 0) {
         container.innerHTML = `<div class="text-center text-slate-500 text-xs py-12"><i class="fas fa-comment text-2xl mb-2 block"></i><p>Nenhuma mensagem enviada.</p></div>`;
         return;
     }
 
-    // 6. Renderiza os balões de mensagens na tela
     container.innerHTML = messages.map(msg => {
-        // Normaliza os IDs para comparação
         const normalizeDev = id => ['usr', 'dev', '_dev_master', 'usr_dev_master'].includes(id) ? 'usr_dev_master' : id;
-        
         const myCleanId = normalizeDev(String(state.currentUser.id || '').replace(/^u-/, '').trim());
         const msgFromClean = normalizeDev(String(msg.from || msg.sender_id || '').replace(/^u-/, '').trim());
         
@@ -7028,7 +7007,6 @@ window.sendChatMessage = async function() {
         </div>`;
     }).join('');
     
-    // 7. Rola o chat para a última mensagem automaticamente
     setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
 }
 
