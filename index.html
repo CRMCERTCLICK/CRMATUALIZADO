@@ -6823,25 +6823,48 @@ window.sendChatMessage = async function() {
                 updateChatUnreadBadge();
             }
 
-            function selectChatContact(conversationId) {
-                state.chat.activeConversation = conversationId;
-                if (state.chat.unread[conversationId]) state.chat.unread[conversationId] = 0;
-                renderChatMessages();
-                renderChatContacts();
-                updateChatUnreadBadge();
-                const parts = conversationId.split('_');
-                const otherId = parts[0] === state.currentUser.id ? parts[1] : parts[0];
-                const otherUser = state.users.find(u => u.id === otherId);
-                if (otherUser) {
-                    document.getElementById('chat-header-name').textContent = otherUser.name;
-                    document.getElementById('chat-header-avatar').textContent = otherUser.name.charAt(0)
-                        .toUpperCase();
-                    document.getElementById('chat-header-status').textContent = 'Online';
-                }
-                setTimeout(() => { const container = document.getElementById('chat-messages-container'); if (
-                        container) container.scrollTop = container.scrollHeight; }, 50);
-                closeChatSidebar();
-            }
+       function selectChatContact(conversationId) {
+    state.chat.activeConversation = conversationId;
+    if (state.chat.unread[conversationId]) state.chat.unread[conversationId] = 0;
+    
+    // 1. Encontra o ID do outro usuário removendo o NOSSO ID da chave da conversa
+    const myId = state.currentUser.id;
+    let otherId = conversationId.replace(myId, '').replace(/^_|_$/g, ''); 
+    
+    // 2. Proteção extra: normaliza o ID do Dev caso venha fragmentado
+    if (['usr', 'dev', 'master', '_dev_master'].includes(otherId) || otherId.includes('dev')) {
+        otherId = 'usr_dev_master';
+    }
+
+    // 3. Busca o usuário
+    const otherUser = state.users.find(u => u.id === otherId);
+
+    // 4. Atualiza o cabeçalho (com fallback de segurança)
+    if (otherUser) {
+        document.getElementById('chat-header-name').textContent = otherUser.name;
+        document.getElementById('chat-header-avatar').textContent = otherUser.name.charAt(0).toUpperCase();
+        document.getElementById('chat-header-status').textContent = 'Online';
+        // Ajusta a cor para remover o estado de "desconhecido"
+        document.getElementById('chat-header-avatar').className = "w-8 h-8 rounded-full bg-brand-500 text-surface-darker flex items-center justify-center text-xs font-bold";
+    } else {
+        // Fallback para evitar que fique travado em "? Selecione um contato" se algo der errado
+        const fallbackName = otherId === 'usr_dev_master' ? 'Desenvolvedor Master' : 'Usuário';
+        document.getElementById('chat-header-name').textContent = fallbackName;
+        document.getElementById('chat-header-avatar').textContent = fallbackName.charAt(0);
+        document.getElementById('chat-header-status').textContent = 'Online';
+    }
+
+    renderChatMessages();
+    renderChatContacts();
+    updateChatUnreadBadge();
+    
+    setTimeout(() => { 
+        const container = document.getElementById('chat-messages-container'); 
+        if (container) container.scrollTop = container.scrollHeight; 
+    }, 50);
+    
+    if (typeof closeChatSidebar === 'function') closeChatSidebar();
+}
 
             function renderChatContacts() {
                 const list = document.getElementById('chat-contact-list');
