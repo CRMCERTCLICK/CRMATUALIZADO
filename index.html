@@ -7923,7 +7923,6 @@ function openChatSidebar() {
                 return isNaN(num) ? 0 : num;
             }
 
-            // Descobre a coluna de valor
             let bestCol = null;
             let maxTotalSum = -1;
 
@@ -7959,7 +7958,6 @@ function openChatSidebar() {
             let totalVendasPlanilha = maxTotalSum;
             let countVendas = jsonData.filter(r => parseBrazilianCurrency(r[bestCol]) >= 1).length;
 
-            // Identifica mês selecionado (ex: 2026-08)
             const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
             let month = activeMonthBtn ? parseInt(activeMonthBtn.dataset.month) || 0 : 0;
             const now = new Date();
@@ -7977,14 +7975,14 @@ function openChatSidebar() {
                 updatedAt: new Date().toISOString()
             };
 
-            // 2. Salva no LocalStorage como backup imediato
+            // 2. Persistência imediata no LocalStorage
             try {
                 localStorage.setItem('certclick_monthly_goals', JSON.stringify(state.monthlyGoals));
-            } catch (e) {
-                console.warn("Aviso ao salvar LocalStorage:", e);
+            } catch (err) {
+                console.warn("Aviso ao gravar no LocalStorage:", err);
             }
 
-            // 3. Persiste na Nuvem (Supabase)
+            // 3. Tenta persistir no Supabase
             const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
             if (db && typeof db.from === 'function') {
                 try {
@@ -7993,14 +7991,13 @@ function openChatSidebar() {
                         month_key: monthKey,
                         target_value: totalVendasPlanilha,
                         realized_value: totalVendasPlanilha,
-                        salesCount: countVendas,
-                        clients: jsonData,
+                        sales_count: countVendas,
                         updated_at: new Date().toISOString()
                     };
                     const { error } = await db.from('monthly_goals').upsert([payload]);
                     if (error) console.error("Erro Supabase (monthly_goals):", error);
                 } catch (err) {
-                    console.error("Erro na comunicação com o Supabase:", err);
+                    console.error("Falha de conexão com Supabase:", err);
                 }
             }
 
