@@ -10352,6 +10352,105 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================================
+// FIX PARA FUNÇÃO AUSENTE (deleteMonthlyGoal)
+// ============================================================================
+// Esta função parece estar faltando no seu código atual e causando o erro no console
+window.deleteMonthlyGoal = async function(monthKey) {
+    if (!confirm('Deseja realmente excluir esta meta mensal?')) return;
+    
+    const db = window.supabaseClient || window.supabase;
+    if (db) {
+        try {
+            await db.from('monthly_goals').delete().eq('month_key', monthKey);
+        } catch(e) {
+            console.error("Erro ao deletar no Supabase:", e);
+        }
+    }
+    
+    if (state.monthlyGoals && state.monthlyGoals[monthKey]) {
+        delete state.monthlyGoals[monthKey];
+        if (typeof saveState === 'function') saveState();
+        if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
+        if (typeof showToast === 'function') showToast('Meta excluída com sucesso.');
+    }
+};
+
+// ============================================================================
+// PORTAL DO PARCEIRO DEDICADO VIA URL (?reg=contador)
+// ============================================================================
+window.addEventListener('DOMContentLoaded', () => {
+    // Usando setTimeout para garantir que rodará mesmo se houver erros menores em outros scripts
+    setTimeout(() => {
+        const params = new URLSearchParams(window.location.search);
+        
+        // Se a URL contiver ?reg=contador, renderiza a página isolada do Parceiro
+        if (params.get('reg') === 'contador') {
+            
+            console.log("Modo Parceiro ativado. Escondendo CRM...");
+            
+            // 1. Oculta tudo que é do sistema padrão (Splash, Login e o App)
+            const splash = document.getElementById('splash-screen');
+            if (splash) splash.style.setProperty('display', 'none', 'important');
+            
+            const loginContainer = document.getElementById('login-container');
+            if (loginContainer) loginContainer.style.setProperty('display', 'none', 'important');
+            
+            const mainApp = document.getElementById('main-app-container');
+            if (mainApp) mainApp.style.setProperty('display', 'none', 'important');
+
+            // 2. Cria a tela exclusiva para o Parceiro (Separada do CRM)
+            const partnerContainer = document.createElement('div');
+            partnerContainer.id = 'partner-registration-fullscreen';
+            partnerContainer.className = 'fixed inset-0 bg-surface-darker flex items-center justify-center z-[99999] p-4';
+            // Garantindo que a tela fique por cima de absolutamente tudo com inline styles
+            partnerContainer.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: #020617; z-index: 999999; display: flex; align-items: center; justify-content: center;';
+            
+            partnerContainer.innerHTML = `
+                <div class="bg-surface-dark border border-slate-800 w-full max-w-md p-8 rounded-2xl shadow-elevated relative z-10 animate-slide-up" style="background-color: #0f172a; border-radius: 1rem; padding: 2rem; width: 100%; max-width: 28rem;">
+                    
+                    <!-- Cabeçalho do Parceiro -->
+                    <div class="text-center space-y-2 mb-8" style="margin-bottom: 2rem; text-align: center;">
+                        <div class="w-14 h-14 bg-amber-500 rounded-xl flex items-center justify-center text-surface-darker shadow-glow mx-auto mb-4" style="background-color: #f59e0b; width: 3.5rem; height: 3.5rem; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; color: #020617;">
+                            <i class="fas fa-handshake text-3xl" style="font-size: 1.875rem;"></i>
+                        </div>
+                        <h2 class="text-2xl font-black text-white tracking-tight" style="font-size: 1.5rem; font-weight: 900; color: white;">Portal do Parceiro</h2>
+                        <p class="text-xs text-slate-400" style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">Cadastre-se para indicar clientes e acompanhar suas comissões no <strong class="text-brand-500" style="color: #10b981;">CertClick</strong>.</p>
+                    </div>
+
+                    <!-- Formulário Exclusivo -->
+                    <form id="standalone-partner-form" class="space-y-4" style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div>
+                            <label class="block text-[10px] font-bold mb-1.5 text-slate-400 uppercase tracking-wider" style="display: block; font-size: 0.625rem; font-weight: 700; margin-bottom: 0.375rem; color: #94a3b8; text-transform: uppercase;">Nome Completo / Escritório <span class="text-rose-500" style="color: #f43f5e;">*</span></label>
+                            <input type="text" id="partner-name" placeholder="Ex: Contabilidade Silva" required class="w-full border border-slate-800 bg-slate-900 rounded-xl px-4 py-3 text-sm outline-none text-white transition-all" style="width: 100%; border: 1px solid #1e293b; background-color: #0f172a; border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 0.875rem; color: white;">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold mb-1.5 text-slate-400 uppercase tracking-wider" style="display: block; font-size: 0.625rem; font-weight: 700; margin-bottom: 0.375rem; color: #94a3b8; text-transform: uppercase;">CRC ou CNPJ</label>
+                            <input type="text" id="partner-crc" placeholder="Opcional" class="w-full border border-slate-800 bg-slate-900 rounded-xl px-4 py-3 text-sm outline-none text-white font-mono transition-all" style="width: 100%; border: 1px solid #1e293b; background-color: #0f172a; border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 0.875rem; color: white; font-family: monospace;">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold mb-1.5 text-slate-400 uppercase tracking-wider" style="display: block; font-size: 0.625rem; font-weight: 700; margin-bottom: 0.375rem; color: #94a3b8; text-transform: uppercase;">Celular (WhatsApp) <span class="text-rose-500" style="color: #f43f5e;">*</span></label>
+                            <input type="text" id="partner-phone" placeholder="(00) 00000-0000" oninput="if(typeof applyMask === 'function') this.value = applyMask(this.value, 'phone')" required class="w-full border border-slate-800 bg-slate-900 rounded-xl px-4 py-3 text-sm outline-none text-white font-mono transition-all" style="width: 100%; border: 1px solid #1e293b; background-color: #0f172a; border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 0.875rem; color: white; font-family: monospace;">
+                        </div>
+
+                        <button type="button" onclick="submitStandalonePartner()" id="btn-submit-partner" class="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold rounded-xl shadow-glow transition-all text-sm mt-6 flex items-center justify-center" style="width: 100%; padding: 0.875rem; background-color: #f59e0b; color: #0f172a; font-weight: 800; border-radius: 0.75rem; font-size: 0.875rem; margin-top: 1.5rem; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-check-circle mr-2" style="margin-right: 0.5rem;"></i> Finalizar Cadastro
+                        </button>
+                    </form>
+                    
+                    <!-- Mensagem de Sucesso (Oculta por padrão) -->
+                    <div id="partner-success-msg" class="hidden text-center py-6 animate-fade-in" style="display: none; text-align: center; padding: 1.5rem 0;">
+                        <i class="fas fa-check-circle text-6xl text-emerald-500 mb-4" style="font-size: 3.75rem; color: #10b981; margin-bottom: 1rem;"></i>
+                        <h3 class="text-xl font-bold text-white mb-2" style="font-size: 1.25rem; font-weight: 700; color: white; margin-bottom: 0.5rem;">Cadastro Concluído!</h3>
+                        <p class="text-sm text-slate-400" style="font-size: 0.875rem; color: #94a3b8;">Sua conta de parceiro foi criada com sucesso.<br>Em breve, nossa equipe entrará em contato pelo WhatsApp fornecido.</p>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(partnerContainer);
+        }
+    }, 100); // 100ms delay para garantir que o DOM esteja pronto e sobrepor qualquer renderização inicial do app
+});
+
+// ============================================================================
 // FUNÇÃO PARA SALVAR O PARCEIRO NO SUPABASE A PARTIR DA TELA DEDICADA
 // ============================================================================
 window.submitStandalonePartner = async function() {
@@ -10372,7 +10471,7 @@ window.submitStandalonePartner = async function() {
 
     const btn = document.getElementById('btn-submit-partner');
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processando...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2" style="margin-right: 0.5rem;"></i> Processando...';
 
     // Cria o objeto idêntico ao que a aba Accountants do seu CRM utiliza
     const newAccountant = {
@@ -10390,8 +10489,8 @@ window.submitStandalonePartner = async function() {
         if (error) throw error;
 
         // Oculta o formulário e exibe a mensagem de sucesso na tela isolada
-        document.getElementById('standalone-partner-form').classList.add('hidden');
-        document.getElementById('partner-success-msg').classList.remove('hidden');
+        document.getElementById('standalone-partner-form').style.display = 'none';
+        document.getElementById('partner-success-msg').style.display = 'block';
 
     } catch (err) {
         console.error("Erro ao cadastrar parceiro:", err);
@@ -10399,7 +10498,7 @@ window.submitStandalonePartner = async function() {
         
         // Volta o botão ao normal em caso de erro
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-check-circle mr-2"></i> Finalizar Cadastro';
+        btn.innerHTML = '<i class="fas fa-check-circle mr-2" style="margin-right: 0.5rem;"></i> Finalizar Cadastro';
     }
 };
 
