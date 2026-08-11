@@ -1429,25 +1429,53 @@
                     </div>
 
         
-<!-- Meta Anual e Distribuição -->
+<!-- META ANUAL COM ABATIMENTO ACUMULADO -->
 <div class="glass-card p-5 rounded-2xl border border-slate-800 shadow-sm">
     <h4 class="font-bold text-xs text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-        <i class="fas fa-calendar-alt text-brand-500"></i> Meta Anual
+        <i class="fas fa-calendar-alt text-brand-500"></i> Meta Anual e Abatimento Geral
     </h4>
-    <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div class="flex-1 w-full">
-            <div class="flex items-center gap-3">
-                <input type="number" id="annual-goal-input" placeholder="Meta Anual (R$)" 
-                       class="w-full border border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-brand-500 bg-slate-950">
-                <button onclick="applyAnnualGoal()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 text-xs font-bold rounded-lg transition-all whitespace-nowrap">
-                    <i class="fas fa-arrow-right"></i> Distribuir
+
+    <!-- GRID COM OS INDICADORES DO ANO -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+        <!-- 1. Input para definir a Meta Anual -->
+        <div>
+            <label class="block text-[10px] text-slate-400 uppercase font-bold mb-1">Definir Meta Anual (R$)</label>
+            <div class="flex items-center gap-2">
+                <input type="number" id="annual-goal-input" placeholder="Ex: 750000" value="750000"
+                       class="w-full border border-slate-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-brand-500 bg-slate-950 text-white font-mono">
+                <button onclick="applyAnnualGoal()" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 text-xs font-bold rounded-lg transition-all whitespace-nowrap">
+                    Aplicar
                 </button>
             </div>
-            <p class="text-[10px] text-slate-500 mt-1">A meta anual será redistribuída igualmente entre todos os meses.</p>
         </div>
-        <div class="text-center sm:text-right">
-            <p class="text-[10px] text-slate-400">Total Realizado (Mês Atual)</p>
-            <p class="text-2xl font-black text-brand-500" id="current-month-achieved">R$ 0,00</p>
+
+        <!-- 2. Meta Total do Ano -->
+        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-center">
+            <p class="text-[10px] text-slate-400 uppercase font-bold">🎯 Meta Anual</p>
+            <p class="text-lg sm:text-xl font-black text-white font-mono mt-1" id="annual-target-display">R$ 750.000,00</p>
+        </div>
+
+        <!-- 3. Soma de Todos os Meses Importados -->
+        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-center">
+            <p class="text-[10px] text-slate-400 uppercase font-bold">📈 Total Arrecadado (Soma Meses)</p>
+            <p class="text-lg sm:text-xl font-black text-emerald-500 font-mono mt-1" id="annual-realized-display">R$ 0,00</p>
+        </div>
+
+        <!-- 4. Quanto Falta para Bater a Meta -->
+        <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-center">
+            <p class="text-[10px] text-slate-400 uppercase font-bold">⏳ Falta para Bater a Meta</p>
+            <p class="text-lg sm:text-xl font-black text-amber-500 font-mono mt-1" id="annual-remaining-display">R$ 750.000,00</p>
+        </div>
+    </div>
+
+    <!-- BARRA DE PROGRESSO DO ANO -->
+    <div class="mt-4 pt-3 border-t border-slate-800/60">
+        <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-400 font-bold">Progresso Anual Acumulado</span>
+            <span class="text-brand-400 font-mono font-bold" id="annual-progress-text">0%</span>
+        </div>
+        <div class="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+            <div id="annual-progress-bar" class="h-full bg-gradient-to-r from-brand-500 to-emerald-400 transition-all duration-500" style="width: 0%"></div>
         </div>
     </div>
 </div>
@@ -8007,6 +8035,7 @@ function openChatSidebar() {
                 });
 
                 container.innerHTML = html;
+                if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
             }
 
             function deleteMonthlyGoal(key) {
@@ -8019,6 +8048,97 @@ function openChatSidebar() {
                     updateCurrentMonthAchieved();
                 });
             }
+
+            // ============================================================================
+// 1. MOTOR QUE SOMA TODOS OS MESES IMPORTADOS E ABATE DA META ANUAL
+// ============================================================================
+window.updateAnnualGoalDeduction = function updateAnnualGoalDeduction() {
+    // Busca a meta anual configurada no campo ou salva na memória (padrão 750000)
+    const inputAnual = document.getElementById('annual-goal-input');
+    const metaAnual = parseFloat(inputAnual?.value) || 
+                      parseFloat(localStorage.getItem('certclick_annual_target')) || 
+                      750000;
+
+    let somaTodosOsMeses = 0;
+
+    // 1. Soma o valor realizado de TODOS os meses salvos em state.monthlyGoals
+    if (state.monthlyGoals) {
+        Object.values(state.monthlyGoals).forEach(mes => {
+            if (mes) {
+                // Tenta pegar realizedValue, achieved ou target do mês importado
+                const valMes = Number(mes.realizedValue || mes.achieved || mes.target) || 0;
+                somaTodosOsMeses += valMes;
+            }
+        });
+    }
+
+    // 2. Se houver vendas fechadas direto no CRM ('pago' ou 'emitido'), soma também
+    const somaVendasCRM = (state.clients || [])
+        .filter(c => ['pago', 'emitido'].includes(c.stage))
+        .reduce((acc, c) => acc + (Number(c.price) || 0), 0);
+
+    // Usa o maior valor para evitar contagem duplicada caso o CRM já reflita a planilha
+    const totalArrecadadoAno = Math.max(somaTodosOsMeses, somaVendasCRM);
+
+    // 3. Calcula quanto falta (nunca deixa ficar negativo visualmente)
+    const faltaAbater = Math.max(0, metaAnual - totalArrecadadoAno);
+
+    // 4. Percentual concluído do ano
+    const progressoAnual = metaAnual > 0 ? Math.min(100, Math.round((totalArrecadadoAno / metaAnual) * 100)) : 0;
+
+    // 5. Atualiza os elementos na tela
+    const elTarget = document.getElementById('annual-target-display');
+    const elRealized = document.getElementById('annual-realized-display');
+    const elRemaining = document.getElementById('annual-remaining-display');
+    const elProgressText = document.getElementById('annual-progress-text');
+    const elProgressBar = document.getElementById('annual-progress-bar');
+
+    if (elTarget) elTarget.textContent = formatCurrency(metaAnual);
+    if (elRealized) elRealized.textContent = formatCurrency(totalArrecadadoAno);
+    if (elRemaining) elRemaining.textContent = formatCurrency(faltaAbater);
+    if (elProgressText) elProgressText.textContent = `${progressoAnual}%`;
+    if (elProgressBar) elProgressBar.style.width = `${progressoAnual}%`;
+};
+
+// ============================================================================
+// 2. FUNÇÃO AO CLICAR NO BOTÃO "APLICAR" / "DISTRIBUIR"
+// ============================================================================
+window.applyAnnualGoal = async function applyAnnualGoal() {
+    const input = document.getElementById('annual-goal-input');
+    const valorAnual = parseFloat(input?.value || 0);
+
+    if (isNaN(valorAnual) || valorAnual <= 0) {
+        return showToast('Digite um valor válido para a meta anual.', 'error');
+    }
+
+    // Salva no LocalStorage
+    localStorage.setItem('certclick_annual_target', valorAnual);
+    if (typeof goalsState !== 'undefined') {
+        goalsState.annualTarget = valorAnual;
+        goalsState.monthlyTarget = valorAnual / 12;
+    }
+
+    // Tenta salvar no Supabase (se disponível)
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    if (db && typeof db.from === 'function') {
+        try {
+            await db.from('system_settings').upsert([{
+                id: 'annual_goal_setting',
+                key: 'annual_target',
+                value: valorAnual,
+                updated_at: new Date().toISOString()
+            }]);
+        } catch (err) {
+            console.error('Erro ao salvar meta anual no Supabase:', err);
+        }
+    }
+
+    saveState();
+    updateAnnualGoalDeduction();
+    if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
+    showToast(`✅ Meta anual de ${formatCurrency(valorAnual)} aplicada e redistribuída!`);
+    if (typeof launchConfetti === 'function') launchConfetti();
+};
 
             // ============================================================
             //  META ANUAL E DISTRIBUIÇÃO
