@@ -7820,17 +7820,18 @@ function openChatSidebar() {
             // ============================================================
             //  METAS - PLANILHA MENSAL
             // ============================================================
-     function handleGoalSpreadsheetUpload(event) {
+     async function handleGoalSpreadsheetUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
             const data = new Uint8Array(e.target.result);
+            // raw: false garante que lemos o texto exato que aparece na tela do Excel
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '0', raw: false });
 
             if (!jsonData || jsonData.length === 0) {
                 showToast('A planilha está vazia.', 'error');
@@ -7840,53 +7841,43 @@ function openChatSidebar() {
             const headers = Object.keys(jsonData[0]);
             const normalizeHeader = str => String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
-            // 1. Busca pela coluna de valor ou faturamento
+            // 1. Procura a coluna de valor
             let valueCol = headers.find(k => {
                 const clean = normalizeHeader(k);
-                return clean.includes('valor') || 
-                       clean.includes('faturamento') || 
-                       clean.includes('total') || 
-                       clean.includes('preco') || 
-                       clean.includes('price') || 
-                       clean.includes('venda') || 
-                       clean.includes('receita') || 
-                       clean.includes('r$') || 
-                       clean.includes('pago');
+                return clean.includes('valor') || clean.includes('faturamento') || clean.includes('total') ||
+                       clean.includes('preco') || clean.includes('price') || clean.includes('receita');
             });
 
-            // 2. PARSER BLINDADO PARA MOEDA BRASILEIRA (Evita truncar milhares como 1.250,00 -> 1.25)
+            // 2. PARSER FINANCEIRO AGRESSIVO (Resolve o erro dos R$ 38.700)
             function parseBrazilianCurrency(val) {
                 if (val === null || val === undefined || val === '') return 0;
                 if (typeof val === 'number') return isNaN(val) ? 0 : val;
                 
                 let str = String(val).trim();
-                // Remove R$, espaços, espaços inquebráveis e letras
-                str = str.replace(/[R$\s\u00A0a-zA-Z:]/g, '');
-                
-                // Se tiver vírgula, tratamos como separador decimal PT-BR
-                if (str.includes(',')) {
-                    // Remove todos os pontos de milhar (ex: 1.250.000,50 -> 1250000,50)
-                    str = str.replace(/\./g, '');
-                    // Troca a vírgula por ponto decimal (-> 1250000.50)
+                // Remove tudo que não for número, ponto ou vírgula
+                str = str.replace(/[^0-9.,]/g, '');
+                if (!str) return 0;
+
+                // Se houver ponto E vírgula (ex: 1.250,00), remove o ponto e troca vírgula por ponto
+                if (str.includes('.') && str.includes(',')) {
+                    str = str.replace(/\./g, '').replace(',', '.');
+                } 
+                // Se só tiver vírgula (ex: 165,90), troca por ponto
+                else if (str.includes(',')) {
                     str = str.replace(',', '.');
                 }
-                
+
                 const num = parseFloat(str);
                 return isNaN(num) ? 0 : num;
             }
 
-            // 3. Fallback inteligente se o nome da coluna for desconhecido
+            // Fallback se não encontrar a coluna pelo nome
             if (!valueCol) {
                 for (let k of headers) {
                     const cleanKey = normalizeHeader(k);
-                    if (/cpf|cnpj|data|tel|phone|cel|id|cep|qtd|quant/.test(cleanKey)) continue;
-
-                    const countNumbers = jsonData.filter(row => {
-                        const v = parseBrazilianCurrency(row[k]);
-                        return v >= 10 && v < 500000;
-                    }).length;
-
-                    if (countNumbers >= Math.max(1, Math.floor(jsonData.length * 0.25))) {
+                    if (/cpf|cnpj|data|tel|phone|cel|id|cep/.test(cleanKey)) continue;
+                    const countNumbers = jsonData.filter(row => parseBrazilianCurrency(row[k]) >= 10).length;
+                    if (countNumbers >= Math.floor(jsonData.length * 0.2)) {
                         valueCol = k;
                         break;
                     }
@@ -7901,33 +7892,46 @@ function openChatSidebar() {
             let totalVendasPlanilha = 0;
             let countVendas = 0;
 
-            // 4. Soma todas as linhas válidas (ignorando linhas de rodapé com "Total gerais" gigantescos)
+            // 3. Soma linha por linha
             jsonData.forEach(row => {
-                // Se a primeira coluna tiver a palavra "Total" ou "Soma", ignoramos para não duplicar
                 const firstColValue = String(Object.values(row)[0] || '').toLowerCase();
-                if (firstColValue.includes('total') || firstColValue.includes('soma') || firstColValue.includes('subtotal')) {
-                    return;
-                }
+                if (firstColValue.includes('total') || firstColValue.includes('soma')) return;
 
                 const valorNum = parseBrazilianCurrency(row[valueCol]);
-                // Consideramos vendas entre R$ 1,00 e R$ 100.000,00 por item
-                if (valorNum > 1 && valorNum < 100000) {
+                // Soma qualquer valor de venda acima de R$ 1,00
+                if (valorNum > 1 && valorNum < 500000) {
                     totalVendasPlanilha += valorNum;
                     countVendas++;
                 }
             });
 
-            // 5. Identifica o mês selecionado
+            // 4. Identifica o mês e ano
             const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
-            let month = 0;
-            if (activeMonthBtn) {
-                month = parseInt(activeMonthBtn.dataset.month) || 0;
-            }
+            let month = activeMonthBtn ? parseInt(activeMonthBtn.dataset.month) || 0 : 0;
             const now = new Date();
             const year = now.getFullYear();
             const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            // 6. Atualiza o estado da aplicação
+            // 5. ATUALIZA NO SUPABASE (BANCO DE DADOS EM NUVEM)
+            const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+            if (db && typeof db.from === 'function') {
+                try {
+                    const payload = {
+                        id: `goal_${monthKey}`,
+                        month_key: monthKey,
+                        target_value: totalVendasPlanilha,
+                        realized_value: totalVendasPlanilha,
+                        sales_count: countVendas,
+                        updated_at: new Date().toISOString()
+                    };
+                    const { error } = await db.from('monthly_goals').upsert([payload]);
+                    if (error) console.error("Erro ao salvar meta no Supabase:", error);
+                } catch (err) {
+                    console.error("Erro na comunicação com Supabase:", err);
+                }
+            }
+
+            // 6. Atualiza estado local do CRM e salva
             state.monthlyGoals[monthKey] = {
                 target: totalVendasPlanilha,
                 achieved: totalVendasPlanilha,
@@ -7939,14 +7943,13 @@ function openChatSidebar() {
 
             saveState();
 
-            // 7. Dispara a atualização visual e abatimento anual
             if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
             if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
 
-            showToast(`✅ Mês importado: ${formatCurrency(totalVendasPlanilha)} (${countVendas} vendas)!`);
+            showToast(`✅ ${countVendas} vendas somadas: ${formatCurrency(totalVendasPlanilha)} e salvas no banco!`);
         } catch (error) {
             console.error('Erro ao processar planilha:', error);
-            showToast('Erro ao processar os valores da planilha.', 'error');
+            showToast('Erro ao processar arquivo.', 'error');
         }
     };
     reader.readAsArrayBuffer(file);
@@ -8027,68 +8030,85 @@ function openChatSidebar() {
             // ============================================================
             //  META ANUAL E DISTRIBUIÇÃO
             // ============================================================
-            function applyAnnualGoal() {
-                const input = document.getElementById('annual-goal-input');
-                const value = parseFloat(input.value);
-                if (!value || value <= 0) {
-                    showToast('Digite um valor válido para a meta anual.', 'error');
-                    return;
-                }
+          async function applyAnnualGoal() {
+    const input = document.getElementById('annual-goal-input');
+    const value = parseFloat(input.value);
+    if (!value || value <= 0) {
+        showToast('Digite um valor válido para a meta anual.', 'error');
+        return;
+    }
 
-                if (!confirm(`Distribuir ${formatCurrency(value)} igualmente entre os 12 meses?`)) return;
+    if (!confirm(`Distribuir ${formatCurrency(value)} igualmente entre os 12 meses?`)) return;
 
-                const monthlyValue = value / 12;
-                const now = new Date();
-                const currentYear = now.getFullYear();
+    const monthlyValue = value / 12;
+    const now = new Date();
+    const currentYear = now.getFullYear();
 
-                let updated = 0;
-                for (let m = 0; m < 12; m++) {
-                    const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
-                    const existingGoal = state.monthlyGoals[monthKey];
-                    
-                    if (existingGoal) {
-                        existingGoal.target = monthlyValue;
-                        const monthSales = state.clients.filter(c => {
-                            if (!c.purchaseDate) return false;
-                            const d = new Date(c.purchaseDate);
-                            return d.getMonth() === m && d.getFullYear() === currentYear && ['pago', 'emitido'].includes(c.stage);
-                        });
-                        let achieved = 0;
-                        if (existingGoal.clients) {
-                            existingGoal.clients.forEach(entry => {
-                                const found = monthSales.find(c => {
-                                    const normalizedName = normalizeName(c.name);
-                                    const normalizedEntry = normalizeName(entry.name);
-                                    return normalizedName.includes(normalizedEntry) || normalizedEntry.includes(normalizedName);
-                                });
-                                if (found) achieved += found.price || 0;
-                            });
-                        }
-                        existingGoal.achieved = achieved;
-                    } else {
-                        state.monthlyGoals[monthKey] = {
-                            target: monthlyValue,
-                            achieved: 0,
-                            clients: [],
-                            matchedClients: [],
-                            importedAt: new Date().toISOString()
-                        };
-                    }
-                    updated++;
-                }
+    let updated = 0;
+    for (let m = 0; m < 12; m++) {
+        const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
+        const existingGoal = state.monthlyGoals[monthKey];
 
-                const currentMonthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-                if (state.monthlyGoals[currentMonthKey]) {
-                    goalsState.monthlyTarget = state.monthlyGoals[currentMonthKey].target;
-                }
-
-                saveState();
-                renderMonthlyGoals();
-                updateGoalProgress();
-                updateCurrentMonthAchieved();
-                showToast(`✅ Meta anual de ${formatCurrency(value)} distribuída!`);
-                launchConfetti();
+        if (existingGoal) {
+            existingGoal.target = monthlyValue;
+            const monthSales = state.clients.filter(c => {
+                if (!c.purchaseDate) return false;
+                const d = new Date(c.purchaseDate);
+                return d.getMonth() === m && d.getFullYear() === currentYear && ['pago', 'emitido'].includes(c.stage);
+            });
+            let achieved = 0;
+            if (existingGoal.clients) {
+                existingGoal.clients.forEach(entry => {
+                    const found = monthSales.find(c => {
+                        const normalizedName = normalizeName(c.name);
+                        const normalizedEntry = normalizeName(entry.name);
+                        return normalizedName.includes(normalizedEntry) || normalizedEntry.includes(normalizedName);
+                    });
+                    if (found) achieved += found.price || 0;
+                });
             }
+            existingGoal.achieved = achieved;
+        } else {
+            state.monthlyGoals[monthKey] = {
+                target: monthlyValue,
+                achieved: 0,
+                clients: [],
+                matchedClients: [],
+                importedAt: new Date().toISOString()
+            };
+        }
+        updated++;
+    }
+
+    const currentMonthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (state.monthlyGoals[currentMonthKey]) {
+        goalsState.monthlyTarget = state.monthlyGoals[currentMonthKey].target;
+    }
+
+    // --- NOVO: SALVA A META ANUAL NO BANCO DE DADOS SUPABASE ---
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    if (db && typeof db.from === 'function') {
+        try {
+            await db.from('system_settings').upsert([{
+                id: 'annual_goal_setting',
+                key: 'annual_target',
+                value: value,
+                updated_at: new Date().toISOString()
+            }]);
+        } catch (err) {
+            console.error('Erro ao salvar meta anual no Supabase:', err);
+        }
+    }
+
+    localStorage.setItem('certclick_annual_target', value);
+    saveState();
+    renderMonthlyGoals();
+    updateGoalProgress();
+    updateCurrentMonthAchieved();
+    if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
+    showToast(`✅ Meta anual de ${formatCurrency(value)} distribuída!`);
+    launchConfetti();
+}
 
             // ============================================================
             //  CONTADOR DE VALOR REALIZADO DO MÊS ATUAL
