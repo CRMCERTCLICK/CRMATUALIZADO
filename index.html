@@ -7820,106 +7820,104 @@ function openChatSidebar() {
             // ============================================================
             //  METAS - PLANILHA MENSAL
             // ============================================================
-            function handleGoalSpreadsheetUpload(event) {
-                const file = event.target.files[0];
-                if (!file) return;
+          function handleGoalSpreadsheetUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
-                        if (!jsonData || jsonData.length === 0) {
-                            showToast('A planilha está vazia.', 'error');
-                            return;
-                        }
-
-                        const headers = Object.keys(jsonData[0]);
-                        const nameCol = headers.find(h => /cliente|nome|name|empresa|razao|razao social|razaosocial|razao_social|titular|contratante/i.test(h)) || headers[0];
-                        const valueCol = headers.find(h => /valor|preco|price|total|venda|faturamento|receita/i.test(h)) || headers[1] || headers[0];
-
-                        const entries = jsonData.map(row => {
-                            const name = String(row[nameCol] || '').trim();
-                            const rawValue = String(row[valueCol] || '0').replace(/[^\d,.]/g, '').replace(',', '.');
-                            const value = parseFloat(rawValue) || 0;
-                            return { name, value };
-                        }).filter(item => item.name.length > 0);
-
-                        if (entries.length === 0) {
-                            showToast('Nenhum cliente com valor encontrado. Verifique as colunas.', 'error');
-                            return;
-                        }
-
-                        const totalGoal = entries.reduce((sum, item) => sum + item.value, 0);
-
-                        const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
-                        let month = 0;
-                        if (activeMonthBtn) {
-                            month = parseInt(activeMonthBtn.dataset.month) || 0;
-                        }
-                        const now = new Date();
-                        const year = now.getFullYear();
-                        const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-
-                        if (state.monthlyGoals[monthKey]) {
-                            if (!confirm(`Já existe uma meta para ${monthKey}. Deseja substituir?`)) return;
-                        }
-
-                        const monthSales = state.clients.filter(c => {
-                            if (!c.purchaseDate) return false;
-                            const d = new Date(c.purchaseDate);
-                            return d.getMonth() === month && d.getFullYear() === year && ['pago', 'emitido'].includes(c.stage);
-                        });
-
-                        let achieved = 0;
-                        const matchedClients = [];
-                        entries.forEach(entry => {
-                            const found = monthSales.find(c => {
-                                const normalizedName = normalizeName(c.name);
-                                const normalizedEntry = normalizeName(entry.name);
-                                return normalizedName.includes(normalizedEntry) || normalizedEntry.includes(normalizedName);
-                            });
-                            if (found) {
-                                achieved += found.price || 0;
-                                matchedClients.push({ ...found, matchedWith: entry.name });
-                            }
-                        });
-
-                        state.monthlyGoals[monthKey] = {
-                            target: totalGoal,
-                            achieved: achieved,
-                            clients: entries,
-                            matchedClients: matchedClients,
-                            importedAt: new Date().toISOString()
-                        };
-
-                        const currentMonth = now.getMonth();
-                        if (month === currentMonth) {
-                            goalsState.monthlyTarget = totalGoal;
-                        }
-
-                        saveState();
-                        renderMonthlyGoals();
-                        updateGoalProgress();
-                        updateCurrentMonthAchieved();
-                        showToast(`✅ Meta de ${formatCurrency(totalGoal)} importada para ${monthKey}!`);
-                        launchConfetti();
-
-                        document.getElementById('goal-upload-status').classList.remove('hidden');
-                        document.getElementById('goal-upload-message').textContent = `Planilha carregada! Meta: ${formatCurrency(totalGoal)}`;
-                        document.getElementById('goal-upload-count').textContent = `${entries.length} clientes`;
-
-                    } catch (error) {
-                        console.error('Erro ao processar planilha:', error);
-                        showToast('Erro ao processar o arquivo.', 'error');
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-                event.target.value = '';
+            if (!jsonData || jsonData.length === 0) {
+                showToast('A planilha está vazia.', 'error');
+                return;
             }
+
+            // 1. Encontra a coluna correta priorizando "Valor total" no cabeçalho
+            const headers = Object.keys(jsonData[0]);
+            const valueCol = headers.find(k => /valor\s*total/i.test(k)) ||
+                             headers.find(k => /faturamento/i.test(k)) ||
+                             headers.find(k => /^total$/i.test(k.trim())) ||
+                             headers.find(k => /valor|preco|price|venda|receita/i.test(k));
+
+            if (!valueCol) {
+                showToast('Coluna de valor/faturamento não encontrada na planilha.', 'error');
+                return;
+            }
+
+            // 2. Função blindada para converter qualquer formato brasileiro em número real
+            function parseBrazilianCurrency(val) {
+                if (val === null || val === undefined || val === '') return 0;
+                if (typeof val === 'number') return isNaN(val) ? 0 : val;
+                
+                let str = String(val).trim();
+                // Remove R$, letras e espaços invisíveis do Excel (\u00A0)
+                str = str.replace(/[R$\s\u00A0]/gi, '');
+                
+                // Se usar vírgula como decimal (ex: "1.234,56" ou "165,90")
+                if (str.includes(',')) {
+                    str = str.replace(/\./g, '').replace(',', '.');
+                }
+                
+                const num = parseFloat(str);
+                return isNaN(num) ? 0 : num;
+            }
+
+            let totalVendasPlanilha = 0;
+            let countVendas = 0;
+
+            // 3. Soma linha por linha sem perder nenhum centavo nem truncar milhares
+            jsonData.forEach(row => {
+                const valorNum = parseBrazilianCurrency(row[valueCol]);
+                if (valorNum > 0) {
+                    totalVendasPlanilha += valorNum;
+                    countVendas++;
+                }
+            });
+
+            // 4. Identifica o mês selecionado no padrão YYYY-MM
+            const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
+            let month = 0;
+            if (activeMonthBtn) {
+                month = parseInt(activeMonthBtn.dataset.month) || 0;
+            }
+            const now = new Date();
+            const year = now.getFullYear();
+            const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+            if (state.monthlyGoals[monthKey]) {
+                if (!confirm(`Já existe uma meta para ${monthKey}. Deseja substituir?`)) return;
+            }
+
+            // 5. Salva no estado e sincroniza o valor realizado
+            state.monthlyGoals[monthKey] = {
+                target: totalVendasPlanilha,
+                achieved: totalVendasPlanilha,
+                realizedValue: totalVendasPlanilha,
+                salesCount: countVendas,
+                clients: jsonData,
+                updatedAt: new Date().toISOString()
+            };
+
+            saveState();
+
+            // 6. Recalcula os painéis e o abatimento anual na hora
+            if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
+            if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
+
+            showToast(`✅ ${countVendas} clientes somados com sucesso: ${formatCurrency(totalVendasPlanilha)}!`);
+        } catch (error) {
+            console.error('Erro ao processar planilha:', error);
+            showToast('Erro ao processar os valores da planilha.', 'error');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+        
 
             function renderMonthlyGoals() {
                 const container = document.getElementById('goal-monthly-list');
