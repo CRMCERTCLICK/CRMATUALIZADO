@@ -2869,6 +2869,129 @@ window.loadState = async function loadState() {
                         state.chat.unread = parsed.unread || {}; }
                 } catch (e) {}
             }
+// ============================================================
+//  GESTÃO DO HISTÓRICO DE CHAT & EXCLUSÃO
+// ============================================================
+
+function clearCurrentConversation() {
+    const activeKey = state.chat.activeConversation;
+    if (!activeKey) {
+        showToast('Selecione um contato para limpar a conversa.', 'error');
+        return;
+    }
+
+    const messages = state.chat.messages[activeKey] || [];
+    if (messages.length === 0) {
+        showToast('Esta conversa já está limpa.', 'info');
+        return;
+    }
+
+    openPremiumConfirm(
+        "Limpar Histórico",
+        "Tem certeza de que deseja apagar todas as mensagens desta conversa? Esta ação não poderá ser desfeita.",
+        async () => {
+            const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+            if (db && typeof db.from === 'function' && state.currentUser) {
+                try {
+                    const myId = String(state.currentUser.id).replace(/^u-/, '').trim();
+                    const otherId = activeKey.replace(myId, '').replace('_', '').trim();
+
+                    const { error } = await db
+                        .from('chat_messages')
+                        .delete()
+                        .or(`and(sender_id.eq.${myId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${myId})`);
+
+                    if (error) {
+                        console.error("Erro ao limpar mensagens no Supabase:", error);
+                        showToast("Erro ao apagar histórico no servidor: " + error.message, "error");
+                        return;
+                    }
+                } catch (err) {
+                    console.error("Erro de requisição Supabase:", err);
+                    showToast("Não foi possível sincronizar a exclusão com a nuvem.", "error");
+                    return;
+                }
+            }
+
+            state.chat.messages[activeKey] = [];
+            delete state.chat.unread[activeKey];
+
+            if (typeof saveChatState === 'function') saveChatState();
+            
+            renderChatMessages();
+            if (typeof renderChatContacts === 'function') renderChatContacts();
+            
+            showToast('Histórico de conversas limpo com sucesso.');
+        }
+    );
+}
+
+async function deleteSingleMessage(messageId) {
+    const activeKey = state.chat.activeConversation;
+    if (!activeKey || !state.chat.messages[activeKey]) return;
+
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    if (db && typeof db.from === 'function') {
+        try {
+            const { error } = await db
+                .from('chat_messages')
+                .delete()
+                .eq('id', messageId);
+
+            if (error) {
+                console.error("Erro ao apagar mensagem:", error);
+                showToast("Erro ao remover mensagem: " + error.message, "error");
+                return;
+            }
+        } catch (err) {
+            console.error("Erro de requisição Supabase:", err);
+        }
+    }
+
+    state.chat.messages[activeKey] = state.chat.messages[activeKey].filter(m => m.id !== messageId);
+    if (typeof saveChatState === 'function') saveChatState();
+
+    renderChatMessages();
+    showToast('Mensagem removida.');
+}
+
+function renderChatMessages() {
+    const container = document.getElementById('chat-messages-container');
+    if (!container) return;
+
+    const activeKey = state.chat.activeConversation;
+    if (!activeKey || !state.chat.messages[activeKey] || state.chat.messages[activeKey].length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-slate-500 text-xs py-12">
+                <i class="fas fa-comment-dots text-2xl text-slate-700 mb-2 block"></i>
+                <p>Nenhuma mensagem nesta conversa. Comece enviando um oi!</p>
+            </div>
+        `;
+        return;
+    }
+
+    const myCleanId = String(state.currentUser?.id || '').replace(/^u-/, '').trim();
+
+    container.innerHTML = state.chat.messages[activeKey].map(msg => {
+        const isSentByMe = String(msg.from).replace(/^u-/, '').trim() === myCleanId;
+        const bubbleClass = isSentByMe ? 'sent' : 'received';
+        const timeFormatted = formatDateShort(msg.timestamp) + ' ' + (msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '');
+
+        return `
+            <div class="flex flex-col ${isSentByMe ? 'items-end' : 'items-start'} group mb-2">
+                <div class="chat-message ${bubbleClass} p-3 rounded-lg relative flex items-start gap-2 max-w-[75%] shadow-sm">
+                    <span class="text-xs break-words leading-relaxed flex-1">${escapeHTML(msg.text)}</span>
+                    <button onclick="deleteSingleMessage('${msg.id}')" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-rose-500 text-[10px]" title="Excluir mensagem">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <span class="text-[9px] text-slate-500 mt-0.5 px-1">${timeFormatted}</span>
+            </div>
+        `;
+    }).join('');
+
+    container.scrollTop = container.scrollHeight;
+}
 
             function initMessageTemplates() {
                 try {
