@@ -2870,10 +2870,10 @@ window.loadState = async function loadState() {
                 } catch (e) {}
             }
 // ============================================================
-//  GESTÃO DO HISTÓRICO DE CHAT & EXCLUSÃO
+//  GESTÃO DO HISTÓRICO DE CHAT & EXCLUSÃO (ESCOPO GLOBAL)
 // ============================================================
 
-function clearCurrentConversation() {
+window.clearCurrentConversation = function clearCurrentConversation() {
     const activeKey = state.chat.activeConversation;
     if (!activeKey) {
         showToast('Selecione um contato para limpar a conversa.', 'error');
@@ -2918,15 +2918,15 @@ function clearCurrentConversation() {
 
             if (typeof saveChatState === 'function') saveChatState();
             
-            renderChatMessages();
+            if (typeof window.renderChatMessages === 'function') window.renderChatMessages();
             if (typeof renderChatContacts === 'function') renderChatContacts();
             
             showToast('Histórico de conversas limpo com sucesso.');
         }
     );
-}
+};
 
-async function deleteSingleMessage(messageId) {
+window.deleteSingleMessage = async function deleteSingleMessage(messageId) {
     const activeKey = state.chat.activeConversation;
     if (!activeKey || !state.chat.messages[activeKey]) return;
 
@@ -2951,11 +2951,11 @@ async function deleteSingleMessage(messageId) {
     state.chat.messages[activeKey] = state.chat.messages[activeKey].filter(m => m.id !== messageId);
     if (typeof saveChatState === 'function') saveChatState();
 
-    renderChatMessages();
+    if (typeof window.renderChatMessages === 'function') window.renderChatMessages();
     showToast('Mensagem removida.');
-}
+};
 
-function renderChatMessages() {
+window.renderChatMessages = function renderChatMessages() {
     const container = document.getElementById('chat-messages-container');
     if (!container) return;
 
@@ -2991,7 +2991,7 @@ function renderChatMessages() {
     }).join('');
 
     container.scrollTop = container.scrollHeight;
-}
+};
 
             function initMessageTemplates() {
                 try {
