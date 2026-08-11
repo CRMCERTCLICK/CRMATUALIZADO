@@ -1125,9 +1125,9 @@
                                         <div class="status-sub text-slate-500">Aguardando conexão</div>
                                     </div>
                                 </div>
-                                <button onclick="connectWhatsApp()" id="wa-connect-btn" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5">
-                                    <i class="fas fa-plug"></i> Conectar
-                                </button>
+                                <button onclick="abrirWhatsAppWebPopup()" id="wa-connect-btn" class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5">
+    <i class="fas fa-plug"></i> Conectar
+</button>
                                 <button onclick="disconnectWhatsApp()" id="wa-disconnect-btn" class="hidden px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5">
                                     <i class="fas fa-unlink"></i> Desconectar
                                 </button>
@@ -5545,77 +5545,29 @@ async function fetchReceitaFederalBulk(data, type) {
                 if (message) showToast(message);
             }
 
-            function connectWhatsApp() {
-                if (state.whatsapp.status === 'connected') {
-                    showToast('WhatsApp já está conectado.');
-                    return;
-                }
+           function connectWhatsApp() {
+                abrirWhatsAppWebPopup();
+            }
 
-                updateWhatsAppStatus('connecting', 'Gerando QR Code...');
-                
-                const qrContainer = document.getElementById('wa-qr-code');
-                qrContainer.innerHTML = '';
-                
-                const sessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-                const qrData = `https://wa.me/?session=${sessionId}&user=${state.currentUser ? state.currentUser.username : 'user'}`;
-                
-                try {
-                    if (typeof QRCode !== 'undefined') {
-                        waQRCodeInstance = new QRCode(qrContainer, {
-                            text: qrData,
-                            width: 220,
-                            height: 220,
-                            colorDark: '#000000',
-                            colorLight: '#ffffff',
-                            correctLevel: QRCode.CorrectLevel.H
-                        });
-                        
-                        const instructions = document.createElement('div');
-                        instructions.className = 'wa-qr-instructions mt-4';
-                        instructions.innerHTML = `
-                            <p>📱 Escaneie o QR Code com o <strong>WhatsApp</strong> do seu celular</p>
-                            <small>O código expira em 30 segundos • Mantenha a página aberta</small>
-                        `;
-                        qrContainer.parentElement.appendChild(instructions);
-                    } else {
-                        qrContainer.innerHTML = `
-                            <div class="wa-qr-loading">
-                                <div class="spinner"></div>
-                                <p>Carregando biblioteca QR Code...</p>
-                            </div>
-                        `;
-                        const script = document.createElement('script');
-                        script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
-                        document.head.appendChild(script);
-                        script.onload = () => {
-                            showToast('Biblioteca QR carregada. Clique em "Conectar" novamente.');
-                            updateWhatsAppStatus('disconnected');
-                        };
-                        return;
-                    }
-                    
-                    if (state.whatsapp._qrTimeout) clearTimeout(state.whatsapp._qrTimeout);
-                    state.whatsapp._qrTimeout = setTimeout(() => {
-                        if (state.whatsapp.status === 'connecting') {
-                            updateWhatsAppStatus('connected', 'WhatsApp conectado com sucesso!');
-                            addNotification('WhatsApp Conectado', 'WhatsApp Web integrado ao CRM.');
-                        }
-                    }, 30000);
-                    
-                    showToast('Escaneie o QR Code com seu WhatsApp.');
-                } catch (e) {
-                    console.error('Erro ao gerar QR Code:', e);
-                    updateWhatsAppStatus('error', 'Erro ao gerar QR Code.');
-                    qrContainer.innerHTML = `
-                        <div class="text-center p-4">
-                            <i class="fas fa-exclamation-triangle text-3xl text-amber-500 mb-3 block"></i>
-                            <p class="text-sm text-slate-400">Erro ao gerar QR Code</p>
-                            <p class="text-xs text-slate-500 mt-1">Tente novamente em alguns segundos.</p>
-                            <button onclick="connectWhatsApp()" class="mt-3 px-4 py-2 bg-brand-500 text-white text-xs font-bold rounded-lg">
-                                Tentar Novamente
-                            </button>
-                        </div>
-                    `;
+            function abrirWhatsAppWebPopup() {
+                const largura = 900;
+                const altura = 700;
+
+                // Calcula o centro da tela baseado nas dimensões do monitor do usuário
+                const esquerda = (window.screen.width / 2) - (largura / 2);
+                const topo = (window.screen.height / 2) - (altura / 2);
+
+                const opcoes = `width=${largura},height=${altura},top=${topo},left=${esquerda},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no,location=no`;
+
+                // Abre o WhatsApp Web nativo em uma janela flutuante e centralizada
+                const popup = window.open('https://web.whatsapp.com', 'WhatsAppWebConexao', opcoes);
+
+                if (popup) {
+                    popup.focus();
+                    // Atualiza visualmente o status para "Conectado" na interface do CRM
+                    updateWhatsAppStatus('connected', 'WhatsApp aberto na janela flutuante!');
+                } else {
+                    showToast('Por favor, libere os pop-ups do navegador para abrir o WhatsApp.', 'error');
                 }
             }
 
