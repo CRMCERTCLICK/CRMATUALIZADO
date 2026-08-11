@@ -2819,7 +2819,7 @@ window.loadState = async function loadState() {
         state.logs = dbLogs || [];
         state.campaigns = dbCampaigns || [];
 
-        // 1. Tenta restaurar do LocalStorage (backup imediato)
+      // 1. Tenta restaurar do LocalStorage primeiro (backup imediato)
         const savedGoalsLocal = localStorage.getItem('certclick_monthly_goals');
         if (savedGoalsLocal) {
             try {
@@ -2829,84 +2829,22 @@ window.loadState = async function loadState() {
             }
         }
 
-        // 2. Atualiza com os dados vindos do banco Supabase
+        // 2. Atualiza com os dados vindos do banco Supabase sem apagar a lista de clientes
         if (dbGoals && dbGoals.length > 0) {
             if (!state.monthlyGoals) state.monthlyGoals = {};
             dbGoals.forEach(g => {
+                const mesExistente = state.monthlyGoals[g.month_key] || {};
                 state.monthlyGoals[g.month_key] = {
-                    target: Number(g.target_value) || 0,
-                    achieved: Number(g.realized_value) || 0,
-                    realizedValue: Number(g.realized_value) || 0,
-                    salesCount: g.sales_count || g.salesCount || 0,
-                    clients: g.clients || [],
+                    ...mesExistente,
+                    target: Number(g.target_value) || mesExistente.target || 0,
+                    achieved: Number(g.realized_value) || mesExistente.achieved || 0,
+                    realizedValue: Number(g.realized_value) || mesExistente.realizedValue || 0,
+                    salesCount: g.sales_count || g.salesCount || mesExistente.salesCount || 0,
+                    clients: (g.clients && g.clients.length > 0) ? g.clients : (mesExistente.clients || []),
                     updatedAt: g.updated_at
                 };
             });
         }
-
-        // Carrega as metas do banco Supabase para a memória do sistema
-        if (dbGoals && dbGoals.length > 0) {
-            if (!state.monthlyGoals) state.monthlyGoals = {};
-            dbGoals.forEach(g => {
-                state.monthlyGoals[g.month_key] = {
-                    target: Number(g.target_value) || 0,
-                    achieved: Number(g.realized_value) || 0,
-                    realizedValue: Number(g.realized_value) || 0,
-                    salesCount: g.sales_count || 0,
-                    updatedAt: g.updated_at
-                };
-            });
-        }
-
-        // Mantém configurações menores no LocalStorage (como Tema e Interface)
-        const getLocal = (key, fallback) => { 
-            try { const data = localStorage.getItem(key); return data ? JSON.parse(data) : fallback; } 
-            catch (e) { return fallback; } 
-        };
-        
-        state.tasks = getLocal('certclick_tasks', []);
-        state.globalNotes = getLocal('certclick_notes', []);
-        state.notifications = getLocal('certclick_notifications', []);
-        state.monthlyGoals = getLocal('certclick_monthly_goals', {});
-        
-        const savedRenewal = getLocal('certclick_renewal_comparison', null);
-        if (savedRenewal) state.renewalComparison = savedRenewal;
-        
-        const savedGoals = getLocal('certclick_goals', null);
-        if (savedGoals) { 
-            goalsState.monthlyTarget = savedGoals.monthlyTarget || 5000;
-            goalsState.commissionRate = savedGoals.commissionRate || 0;
-            goalsState.goals = savedGoals.goals || {};
-            goalsState.renewals = savedGoals.renewals || []; 
-        }
-
-        const waState = getLocal('certclick_whatsapp_state', null);
-        if (waState) {
-            state.whatsapp.connected = waState.connected || false;
-            state.whatsapp.status = waState.status || 'disconnected';
-        }
-
-        const emailState = getLocal('certclick_email_state', null);
-        if (emailState) {
-            state.email.connected = emailState.connected || false;
-            state.email.settings = emailState.settings || { name: '', address: '', password: '', smtp: 'smtp.gmail.com' };
-        }
-
-        loadChatState();
-        initMessageTemplates();
-
-        // Garantir que clientes antigos tenham um vendedor atribuído
-        state.clients.forEach(c => { 
-            if (!c.assignedTo) {
-                c.assignedTo = state.users.find(u => u.role === 'operator')?.id || state.currentUser?.id; 
-            }
-        });
-
-        if ((state.renewalComparison && state.renewalComparison.prevData && state.renewalComparison.prevData.length > 0) || 
-    (state.renewalComparison && state.renewalComparison.currentData && state.renewalComparison.currentData.length > 0)) {
-    if (typeof processRenewalComparison === 'function') processRenewalComparison();
-    if (typeof renderRenewalComparison === 'function') renderRenewalComparison();
-}
         if(typeof updateFinancialData === 'function') updateFinancialData();
         if (Object.keys(state.monthlyGoals).length > 0) {
             if(typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
@@ -7964,25 +7902,27 @@ function openChatSidebar() {
             const year = now.getFullYear();
             const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            // 1. Atualiza memória do estado do CRM
+            // 1. Atualiza no objeto de estado preservando os campos
             if (!state.monthlyGoals) state.monthlyGoals = {};
+            
             state.monthlyGoals[monthKey] = {
                 target: totalVendasPlanilha,
                 achieved: totalVendasPlanilha,
                 realizedValue: totalVendasPlanilha,
                 salesCount: countVendas,
+                importedAt: new Date().toLocaleDateString('pt-BR'),
                 clients: jsonData,
                 updatedAt: new Date().toISOString()
             };
 
-            // 2. Persistência imediata no LocalStorage
+            // 2. Salva imediatamente no localStorage do navegador
             try {
                 localStorage.setItem('certclick_monthly_goals', JSON.stringify(state.monthlyGoals));
             } catch (err) {
-                console.warn("Aviso ao gravar no LocalStorage:", err);
+                console.warn('Aviso LocalStorage:', err);
             }
 
-            // 3. Tenta persistir no Supabase
+            // 3. Salva no banco de dados Supabase
             const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
             if (db && typeof db.from === 'function') {
                 try {
@@ -7995,9 +7935,9 @@ function openChatSidebar() {
                         updated_at: new Date().toISOString()
                     };
                     const { error } = await db.from('monthly_goals').upsert([payload]);
-                    if (error) console.error("Erro Supabase (monthly_goals):", error);
+                    if (error) console.error("Erro no Supabase ao salvar meta:", error);
                 } catch (err) {
-                    console.error("Falha de conexão com Supabase:", err);
+                    console.error("Erro de conexão com o Supabase:", err);
                 }
             }
 
@@ -8016,77 +7956,103 @@ function openChatSidebar() {
 }
         
 
-            function renderMonthlyGoals() {
-                const container = document.getElementById('goal-monthly-list');
-                const countEl = document.getElementById('goal-monthly-count');
-                if (!container) return;
+       function renderMonthlyGoals() {
+    const container = document.getElementById('goal-monthly-list');
+    const countEl = document.getElementById('goal-monthly-count');
+    if (!container) return;
 
-                const keys = Object.keys(state.monthlyGoals);
-                if (keys.length === 0) {
-                    container.innerHTML = `
-                        <div class="text-center text-slate-500 py-8">
-                            <i class="fas fa-upload text-3xl text-slate-700 mb-3 block"></i>
-                            <p class="text-sm font-medium">Nenhuma meta cadastrada.</p>
-                            <p class="text-xs text-slate-600 mt-1">Importe uma planilha para criar a meta do mês.</p>
-                        </div>
-                    `;
-                    if (countEl) countEl.textContent = '0 registros';
-                    return;
-                }
+    // 1. Garante a restauração do LocalStorage caso a memória tenha resetado
+    const savedGoalsLocal = localStorage.getItem('certclick_monthly_goals');
+    if (savedGoalsLocal) {
+        try {
+            const parsed = JSON.parse(savedGoalsLocal);
+            state.monthlyGoals = { ...parsed, ...(state.monthlyGoals || {}) };
+        } catch (e) {
+            console.warn("Erro ao ler metas do LocalStorage:", e);
+        }
+    }
 
-                const sortedKeys = keys.sort((a, b) => b.localeCompare(a));
-                if (countEl) countEl.textContent = `${keys.length} registros`;
+    if (!state.monthlyGoals) state.monthlyGoals = {};
 
-                let html = '';
-                sortedKeys.forEach(key => {
-                    const goal = state.monthlyGoals[key];
-                    const [year, month] = key.split('-');
-                    const monthName = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][parseInt(month) - 1];
-                    const progress = goal.target > 0 ? Math.min((goal.achieved / goal.target) * 100, 100) : 0;
-                    const isCurrent = key === `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const keys = Object.keys(state.monthlyGoals);
+    if (keys.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-slate-500 py-8">
+                <i class="fas fa-upload text-3xl text-slate-700 mb-3 block"></i>
+                <p class="text-sm font-medium">Nenhuma meta cadastrada.</p>
+                <p class="text-xs text-slate-600 mt-1">Importe uma planilha para criar a meta do mês.</p>
+            </div>
+        `;
+        if (countEl) countEl.textContent = '0 registros';
+        return;
+    }
 
-                    html += `
-                        <div class="goal-list-item ${isCurrent ? 'bg-brand-500/5' : ''}">
-                            <div>
-                                <span class="font-bold text-slate-200">${monthName}/${year}</span>
-                                ${isCurrent ? '<span class="text-[8px] bg-brand-500/20 text-brand-400 px-2 py-0.5 rounded-full ml-2">Atual</span>' : ''}
-                                <div class="goal-meta">
-                                    ${goal.clients ? `${goal.clients.length} clientes • ` : ''}
-                                    Importado em ${formatDateShort(goal.importedAt)}
-                                </div>
-                            </div>
-                            <div class="text-right flex items-center gap-4">
-                                <div>
-                                    <div class="goal-value">${formatCurrency(goal.target)}</div>
-                                    <div class="text-[10px] text-slate-500">${formatCurrency(goal.achieved || 0)} alcançado</div>
-                                </div>
-                                <div class="w-20 bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                                    <div class="bg-brand-500 h-1.5 rounded-full" style="width: ${progress}%"></div>
-                                </div>
-                                <span class="text-[10px] text-slate-500 min-w-[40px]">${Math.round(progress)}%</span>
-                                <div class="goal-actions">
-                                    <button onclick="deleteMonthlyGoal('${key}')" title="Excluir meta" class="text-rose-500 hover:text-rose-400"><i class="fas fa-trash"></i></button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
+    const sortedKeys = keys.sort((a, b) => b.localeCompare(a));
+    if (countEl) countEl.textContent = `${keys.length} registros`;
 
-                container.innerHTML = html;
-                if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
-            }
+    const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
 
-            function deleteMonthlyGoal(key) {
-                openPremiumConfirm('Excluir Meta', `Deseja excluir a meta de ${key} permanentemente?`, () => {
-                    delete state.monthlyGoals[key];
-                    saveState();
-                    renderMonthlyGoals();
-                    showToast(`Meta de ${key} excluída.`);
-                    updateGoalProgress();
-                    updateCurrentMonthAchieved();
-                });
-            }
+    const currentYear = new Date().getFullYear();
+    const currentMonthKey = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+    let html = '';
+    sortedKeys.forEach(key => {
+        const goal = state.monthlyGoals[key];
+        if (!goal) return;
+
+        const [year, monthStr] = key.split('-');
+        const monthIndex = parseInt(monthStr, 10) - 1;
+        const monthName = monthNames[monthIndex] || `Mês ${monthStr}`;
+
+        const isCurrent = key === currentMonthKey;
+        const target = Number(goal.target) || 0;
+        const achieved = Number(goal.realizedValue || goal.achieved) || 0;
+        const progress = target > 0 ? Math.min(100, Math.round((achieved / target) * 100)) : 0;
+        
+        const countClients = goal.salesCount || (goal.clients ? goal.clients.length : 0);
+        const importedDate = goal.importedAt ? `Importado em ${goal.importedAt}` : (goal.updatedAt ? `Importado em ${new Date(goal.updatedAt).toLocaleDateString('pt-BR')}` : 'Importado');
+
+        html += `
+            <div class="goal-list-item ${isCurrent ? 'bg-brand-500/5 border-brand-500/30' : ''} p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 mb-2.5 flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-sm text-slate-200">${monthName}/${year}</span>
+                        ${isCurrent ? '<span class="text-[8px] font-extrabold uppercase bg-brand-500/20 text-brand-400 px-2 py-0.5 rounded-full border border-brand-500/30">Mês Atual</span>' : ''}
+                    </div>
+                    <div class="goal-meta text-[11px] text-slate-400 mt-0.5">
+                        <span>${countClients} clientes</span> • <span>${importedDate}</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <p class="font-mono font-bold text-sm text-emerald-400">${typeof formatCurrency === 'function' ? formatCurrency(achieved) : `R$ ${achieved.toFixed(2)}`}</p>
+                        <p class="text-[9px] text-slate-500 font-mono">Meta: ${typeof formatCurrency === 'function' ? formatCurrency(target) : `R$ ${target.toFixed(2)}`}</p>
+                    </div>
+
+                    <div class="w-20 bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800 hidden sm:block">
+                        <div class="bg-emerald-500 h-full transition-all duration-500" style="width: ${progress}%"></div>
+                    </div>
+
+                    <span class="text-xs font-mono font-bold text-slate-300 w-8 text-right">${progress}%</span>
+
+                    <button onclick="deleteMonthlyGoal('${key}')" class="p-1.5 text-slate-500 hover:text-rose-400 transition-colors rounded" title="Excluir Mês">
+                        <i class="fas fa-trash text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+
+    if (typeof updateAnnualGoalDeduction === 'function') {
+        updateAnnualGoalDeduction();
+    }
+}
 
             // ============================================================================
 // 1. MOTOR QUE SOMA TODOS OS MESES IMPORTADOS E ABATE DA META ANUAL
