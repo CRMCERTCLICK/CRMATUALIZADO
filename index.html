@@ -2819,6 +2819,31 @@ window.loadState = async function loadState() {
         state.logs = dbLogs || [];
         state.campaigns = dbCampaigns || [];
 
+        // 1. Tenta restaurar do LocalStorage (backup imediato)
+        const savedGoalsLocal = localStorage.getItem('certclick_monthly_goals');
+        if (savedGoalsLocal) {
+            try {
+                state.monthlyGoals = JSON.parse(savedGoalsLocal);
+            } catch (e) {
+                console.warn("Aviso ao ler LocalStorage:", e);
+            }
+        }
+
+        // 2. Atualiza com os dados vindos do banco Supabase
+        if (dbGoals && dbGoals.length > 0) {
+            if (!state.monthlyGoals) state.monthlyGoals = {};
+            dbGoals.forEach(g => {
+                state.monthlyGoals[g.month_key] = {
+                    target: Number(g.target_value) || 0,
+                    achieved: Number(g.realized_value) || 0,
+                    realizedValue: Number(g.realized_value) || 0,
+                    salesCount: g.sales_count || g.salesCount || 0,
+                    clients: g.clients || [],
+                    updatedAt: g.updated_at
+                };
+            });
+        }
+
         // Carrega as metas do banco Supabase para a memória do sistema
         if (dbGoals && dbGoals.length > 0) {
             if (!state.monthlyGoals) state.monthlyGoals = {};
@@ -7872,8 +7897,6 @@ function openChatSidebar() {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            
-            // Lê como texto formatado para não perder precisão e converte manualmente
             const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
 
             if (!jsonData || jsonData.length === 0) {
@@ -7883,7 +7906,6 @@ function openChatSidebar() {
 
             const headers = Object.keys(jsonData[0]);
 
-            // PARSER UNIVERSAL PARA MOEDA BRASILEIRA
             function parseBrazilianCurrency(val) {
                 if (val === null || val === undefined || val === '') return 0;
                 if (typeof val === 'number') return isNaN(val) ? 0 : val;
@@ -7891,7 +7913,6 @@ function openChatSidebar() {
                 let str = String(val).trim().replace(/[R$\s\u00A0a-zA-Z:]/g, '');
                 if (!str) return 0;
 
-                // Trata formato brasileiro (1.250,00) ou formato americano (1250.00)
                 if (str.includes(',') && str.includes('.')) {
                     str = str.replace(/\./g, '').replace(',', '.');
                 } else if (str.includes(',')) {
@@ -7902,14 +7923,13 @@ function openChatSidebar() {
                 return isNaN(num) ? 0 : num;
             }
 
-            // SELECIONA A COLUNA QUE POSSUI A MAIOR SOMA FINANCEIRA NA PLANILHA
+            // Descobre a coluna de valor
             let bestCol = null;
             let maxTotalSum = -1;
 
             for (let col of headers) {
                 const cleanKey = String(col).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-                // Ignora colunas que não são valor financeiro
-                if (/cpf|cnpj|data|tel|phone|cel|id|cep|cep|qtd|quant/.test(cleanKey)) continue;
+                if (/cpf|cnpj|data|tel|phone|cel|id|cep|qtd|quant/.test(cleanKey)) continue;
 
                 let colSum = 0;
                 let validCount = 0;
@@ -7919,54 +7939,35 @@ function openChatSidebar() {
                     if (firstColVal.includes('total') || firstColVal.includes('soma') || firstColVal.includes('subtotal')) return;
 
                     const num = parseBrazilianCurrency(row[col]);
-                    if (num >= 5 && num <= 500000) {
+                    if (num >= 1 && num <= 500000) {
                         colSum += num;
                         validCount++;
                     }
                 });
 
-                // Se pelo menos 20% da coluna tiver números e a soma for a maior encontrada, escolhe ela
-                if (validCount >= Math.floor(jsonData.length * 0.2) && colSum > maxTotalSum) {
+                if (validCount >= Math.floor(jsonData.length * 0.15) && colSum > maxTotalSum) {
                     maxTotalSum = colSum;
                     bestCol = col;
                 }
             }
 
             if (!bestCol || maxTotalSum <= 0) {
-                showToast('Não foi possível identificar valores financeiros na planilha.', 'error');
+                showToast('Não foi possível identificar valores de vendas na planilha.', 'error');
                 return;
             }
 
             let totalVendasPlanilha = maxTotalSum;
-            let countVendas = jsonData.filter(r => parseBrazilianCurrency(r[bestCol]) >= 5).length;
+            let countVendas = jsonData.filter(r => parseBrazilianCurrency(r[bestCol]) >= 1).length;
 
-            // Identifica o mês selecionado
+            // Identifica mês selecionado (ex: 2026-08)
             const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
             let month = activeMonthBtn ? parseInt(activeMonthBtn.dataset.month) || 0 : 0;
             const now = new Date();
             const year = now.getFullYear();
             const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            // SALVA NO SUPABASE
-            const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
-            if (db && typeof db.from === 'function') {
-                try {
-                    const payload = {
-                        id: `goal_${monthKey}`,
-                        month_key: monthKey,
-                        target_value: totalVendasPlanilha,
-                        realized_value: totalVendasPlanilha,
-                        sales_count: countVendas,
-                        updated_at: new Date().toISOString()
-                    };
-                    const { error } = await db.from('monthly_goals').upsert([payload]);
-                    if (error) console.error("Erro Supabase:", error);
-                } catch (err) {
-                    console.error("Erro na comunicação com Supabase:", err);
-                }
-            }
-
-            // ATUALIZA O ESTADO DO CRM
+            // 1. Atualiza memória do estado do CRM
+            if (!state.monthlyGoals) state.monthlyGoals = {};
             state.monthlyGoals[monthKey] = {
                 target: totalVendasPlanilha,
                 achieved: totalVendasPlanilha,
@@ -7976,15 +7977,42 @@ function openChatSidebar() {
                 updatedAt: new Date().toISOString()
             };
 
+            // 2. Salva no LocalStorage como backup imediato
+            try {
+                localStorage.setItem('certclick_monthly_goals', JSON.stringify(state.monthlyGoals));
+            } catch (e) {
+                console.warn("Aviso ao salvar LocalStorage:", e);
+            }
+
+            // 3. Persiste na Nuvem (Supabase)
+            const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+            if (db && typeof db.from === 'function') {
+                try {
+                    const payload = {
+                        id: `goal_${monthKey}`,
+                        month_key: monthKey,
+                        target_value: totalVendasPlanilha,
+                        realized_value: totalVendasPlanilha,
+                        salesCount: countVendas,
+                        clients: jsonData,
+                        updated_at: new Date().toISOString()
+                    };
+                    const { error } = await db.from('monthly_goals').upsert([payload]);
+                    if (error) console.error("Erro Supabase (monthly_goals):", error);
+                } catch (err) {
+                    console.error("Erro na comunicação com o Supabase:", err);
+                }
+            }
+
             saveState();
 
             if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
             if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
 
-            showToast(`✅ Coluna "${bestCol}" somada: ${formatCurrency(totalVendasPlanilha)}!`);
+            showToast(`✅ ${countVendas} vendas importadas em ${monthKey}: ${formatCurrency(totalVendasPlanilha)}!`);
         } catch (error) {
             console.error('Erro ao processar planilha:', error);
-            showToast('Erro ao ler a planilha.', 'error');
+            showToast('Erro ao processar arquivo.', 'error');
         }
     };
     reader.readAsArrayBuffer(file);
