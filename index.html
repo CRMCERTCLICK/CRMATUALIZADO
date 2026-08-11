@@ -7828,10 +7828,11 @@ function openChatSidebar() {
     reader.onload = async function(e) {
         try {
             const data = new Uint8Array(e.target.result);
-            // raw: false garante que lemos o texto exato que aparece na tela do Excel
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '0', raw: false });
+            
+            // raw: true pega o valor numérico real da célula sem perdas de formatação
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: 0, raw: true });
 
             if (!jsonData || jsonData.length === 0) {
                 showToast('A planilha está vazia.', 'error');
@@ -7848,22 +7849,19 @@ function openChatSidebar() {
                        clean.includes('preco') || clean.includes('price') || clean.includes('receita');
             });
 
-            // 2. PARSER FINANCEIRO AGRESSIVO (Resolve o erro dos R$ 38.700)
+            // 2. Parser inteligente que funciona tanto para número puro quanto para texto
             function parseBrazilianCurrency(val) {
                 if (val === null || val === undefined || val === '') return 0;
+                // Se o Excel já entregou o número real (raw: true), retorna ele direto!
                 if (typeof val === 'number') return isNaN(val) ? 0 : val;
                 
                 let str = String(val).trim();
-                // Remove tudo que não for número, ponto ou vírgula
-                str = str.replace(/[^0-9.,]/g, '');
+                str = str.replace(/[R$\s\u00A0a-zA-Z:]/g, '');
                 if (!str) return 0;
 
-                // Se houver ponto E vírgula (ex: 1.250,00), remove o ponto e troca vírgula por ponto
-                if (str.includes('.') && str.includes(',')) {
+                if (str.includes(',') && str.includes('.')) {
                     str = str.replace(/\./g, '').replace(',', '.');
-                } 
-                // Se só tiver vírgula (ex: 165,90), troca por ponto
-                else if (str.includes(',')) {
+                } else if (str.includes(',')) {
                     str = str.replace(',', '.');
                 }
 
@@ -7871,7 +7869,7 @@ function openChatSidebar() {
                 return isNaN(num) ? 0 : num;
             }
 
-            // Fallback se não encontrar a coluna pelo nome
+            // Fallback se o cabeçalho tiver nome desconhecido
             if (!valueCol) {
                 for (let k of headers) {
                     const cleanKey = normalizeHeader(k);
@@ -7898,21 +7896,20 @@ function openChatSidebar() {
                 if (firstColValue.includes('total') || firstColValue.includes('soma')) return;
 
                 const valorNum = parseBrazilianCurrency(row[valueCol]);
-                // Soma qualquer valor de venda acima de R$ 1,00
                 if (valorNum > 1 && valorNum < 500000) {
                     totalVendasPlanilha += valorNum;
                     countVendas++;
                 }
             });
 
-            // 4. Identifica o mês e ano
+            // 4. Identifica o mês selecionado
             const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
             let month = activeMonthBtn ? parseInt(activeMonthBtn.dataset.month) || 0 : 0;
             const now = new Date();
             const year = now.getFullYear();
             const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            // 5. ATUALIZA NO SUPABASE (BANCO DE DADOS EM NUVEM)
+            // 5. ATUALIZA NO SUPABASE SEM ERRO DE SILENCIAMENTO
             const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
             if (db && typeof db.from === 'function') {
                 try {
@@ -7925,13 +7922,15 @@ function openChatSidebar() {
                         updated_at: new Date().toISOString()
                     };
                     const { error } = await db.from('monthly_goals').upsert([payload]);
-                    if (error) console.error("Erro ao salvar meta no Supabase:", error);
+                    if (error) {
+                        console.error("Erro detalhado do Supabase:", error);
+                    }
                 } catch (err) {
-                    console.error("Erro na comunicação com Supabase:", err);
+                    console.error("Erro na requisição ao Supabase:", err);
                 }
             }
 
-            // 6. Atualiza estado local do CRM e salva
+            // 6. Atualiza o estado da aplicação
             state.monthlyGoals[monthKey] = {
                 target: totalVendasPlanilha,
                 achieved: totalVendasPlanilha,
@@ -7946,7 +7945,7 @@ function openChatSidebar() {
             if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
             if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
 
-            showToast(`✅ ${countVendas} vendas somadas: ${formatCurrency(totalVendasPlanilha)} e salvas no banco!`);
+            showToast(`✅ ${countVendas} vendas somadas: ${formatCurrency(totalVendasPlanilha)}!`);
         } catch (error) {
             console.error('Erro ao processar planilha:', error);
             showToast('Erro ao processar arquivo.', 'error');
