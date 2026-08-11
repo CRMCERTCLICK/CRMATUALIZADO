@@ -2781,6 +2781,26 @@ async function saveClient(e) {
                 }, 80);
             }
 
+            window.deleteMonthlyGoal = async function(monthKey) {
+    if (!confirm('Deseja realmente excluir esta meta mensal?')) return;
+    
+    const db = window.supabaseClient || window.supabase;
+    if (db) {
+        try {
+            await db.from('monthly_goals').delete().eq('month_key', monthKey);
+        } catch(e) {
+            console.error("Erro ao deletar no Supabase:", e);
+        }
+    }
+    
+    if (state.monthlyGoals && state.monthlyGoals[monthKey]) {
+        delete state.monthlyGoals[monthKey];
+        if (typeof saveState === 'function') saveState();
+        if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
+        if (typeof showToast === 'function') showToast('Meta excluída com sucesso.');
+    }
+};
+
             // ============================================================
 // CARREGAMENTO DE DADOS DO SUPABASE (Substitui o LocalStorage)
 // ============================================================
@@ -10502,6 +10522,112 @@ window.submitStandalonePartner = async function() {
     }
 };
 
-    </script>
+</script> <!-- AQUI TERMINA O SEU SCRIPT PRINCIPAL GIGANTE -->
+
+<!-- ========================================================= -->
+<!-- SCRIPT ISOLADO DO PARCEIRO (Garante que vai rodar sempre) -->
+<!-- ========================================================= -->
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    
+    if (params.get('reg') === 'contador') {
+        
+        // 1. Força o bloqueio de qualquer tela do sistema normal
+        const hideIds = ['splash-screen', 'login-container', 'main-app-container'];
+        hideIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.setProperty('display', 'none', 'important');
+        });
+
+        // 2. Cria e injeta a tela isolada
+        const partnerContainer = document.createElement('div');
+        partnerContainer.id = 'partner-registration-fullscreen';
+        partnerContainer.style.cssText = 'position: fixed; inset: 0; background-color: #020617; z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 1rem;';
+        
+        partnerContainer.innerHTML = `
+            <div style="background-color: #0f172a; border: 1px solid #1e293b; border-radius: 1rem; padding: 2rem; width: 100%; max-width: 28rem; box-shadow: 0 20px 60px -20px rgba(0,0,0,0.6);">
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    <div style="background-color: #f59e0b; width: 3.5rem; height: 3.5rem; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; box-shadow: 0 0 30px -8px rgba(245, 158, 11, 0.4);">
+                        <i class="fas fa-handshake" style="font-size: 1.875rem; color: #020617;"></i>
+                    </div>
+                    <h2 style="font-size: 1.5rem; font-weight: 900; color: white; margin: 0;">Portal do Parceiro</h2>
+                    <p style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">Cadastre-se para indicar clientes e acompanhar suas comissões no <strong style="color: #10b981;">CertClick</strong>.</p>
+                </div>
+
+                <form id="standalone-partner-form" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.625rem; font-weight: 700; margin-bottom: 0.375rem; color: #94a3b8; text-transform: uppercase;">Nome Completo / Escritório <span style="color: #f43f5e;">*</span></label>
+                        <input type="text" id="partner-name" placeholder="Ex: Contabilidade Silva" required style="width: 100%; border: 1px solid #1e293b; background-color: #0f172a; border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 0.875rem; color: white; outline: none;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.625rem; font-weight: 700; margin-bottom: 0.375rem; color: #94a3b8; text-transform: uppercase;">CRC ou CNPJ</label>
+                        <input type="text" id="partner-crc" placeholder="Opcional" style="width: 100%; border: 1px solid #1e293b; background-color: #0f172a; border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 0.875rem; color: white; outline: none; font-family: monospace;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.625rem; font-weight: 700; margin-bottom: 0.375rem; color: #94a3b8; text-transform: uppercase;">Celular (WhatsApp) <span style="color: #f43f5e;">*</span></label>
+                        <input type="text" id="partner-phone" placeholder="(00) 00000-0000" oninput="if(typeof applyMask === 'function') this.value = applyMask(this.value, 'phone')" required style="width: 100%; border: 1px solid #1e293b; background-color: #0f172a; border-radius: 0.75rem; padding: 0.75rem 1rem; font-size: 0.875rem; color: white; outline: none; font-family: monospace;">
+                    </div>
+
+                    <button type="button" onclick="submitStandalonePartner()" id="btn-submit-partner" style="width: 100%; padding: 0.875rem; background-color: #f59e0b; color: #0f172a; font-weight: 800; border-radius: 0.75rem; font-size: 0.875rem; margin-top: 1rem; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                        <i class="fas fa-check-circle" style="margin-right: 0.5rem;"></i> Finalizar Cadastro
+                    </button>
+                </form>
+                
+                <div id="partner-success-msg" style="display: none; text-align: center; padding: 1.5rem 0;">
+                    <i class="fas fa-check-circle" style="font-size: 3.75rem; color: #10b981; margin-bottom: 1rem;"></i>
+                    <h3 style="font-size: 1.25rem; font-weight: 700; color: white; margin-bottom: 0.5rem;">Cadastro Concluído!</h3>
+                    <p style="font-size: 0.875rem; color: #94a3b8;">Sua conta de parceiro foi criada com sucesso.<br>Em breve, nossa equipe entrará em contato pelo WhatsApp fornecido.</p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(partnerContainer);
+    }
+});
+
+window.submitStandalonePartner = async function() {
+    const db = window.supabaseClient || window.supabase;
+    if (!db) {
+        alert("Erro de conexão com o banco de dados. Tente novamente mais tarde.");
+        return;
+    }
+
+    const name = document.getElementById('partner-name').value.trim();
+    const crc = document.getElementById('partner-crc').value.trim();
+    const phone = document.getElementById('partner-phone').value.trim();
+
+    if (!name || !phone) {
+        alert("Por favor, preencha o Nome e o Celular.");
+        return;
+    }
+
+    const btn = document.getElementById('btn-submit-partner');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 0.5rem;"></i> Processando...';
+
+    const newAccountant = {
+        id: 'acc-' + Date.now(),
+        name: name,
+        crc: crc || 'Pendente',
+        phone: phone,
+        syngularReferrals: 0,
+        syngularVouchers: []
+    };
+
+    try {
+        const { error } = await db.from('accountants').insert([newAccountant]);
+        if (error) throw error;
+
+        document.getElementById('standalone-partner-form').style.display = 'none';
+        document.getElementById('partner-success-msg').style.display = 'block';
+    } catch (err) {
+        console.error(err);
+        alert("Erro ao realizar cadastro: " + (err.message || err));
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle" style="margin-right: 0.5rem;"></i> Finalizar Cadastro';
+    }
+};
+</script>
+
 </body>
 </html>
