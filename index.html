@@ -2798,26 +2798,40 @@ window.loadState = async function loadState() {
             { data: dbClients, error: errClients },
             { data: dbAccountants, error: errAccountants },
             { data: dbLogs, error: errLogs },
-            { data: dbCampaigns, error: errCampaigns }
+            { data: dbCampaigns, error: errCampaigns },
+            { data: dbGoals, error: errGoals }
         ] = await Promise.all([
             supabase.from('users').select('*'),
             supabase.from('clients').select('*'),
             supabase.from('accountants').select('*'),
             supabase.from('logs').select('*').order('timestamp', { ascending: false }).limit(300),
-            supabase.from('campaigns').select('*')
+            supabase.from('campaigns').select('*'),
+            supabase.from('monthly_goals').select('*')
         ]);
 
-        // Se houver erro, loga no console mas continua com os dados falsos
-        if (errUsers || errClients || errAccountants) {
-            console.error("Erro na leitura do BD:", errUsers || errClients || errAccountants);
+        if (errUsers || errClients || errAccountants || errGoals) {
+            console.error("Erro na leitura do BD:", errUsers || errClients || errAccountants || errGoals);
         }
 
-        // Alimenta o 'state' local com os dados da nuvem. Se estiver vazio, usa os dados padrão para não quebrar a tela.
-       state.users = dbUsers && dbUsers.length > 0 ? dbUsers : defaultUsers;
-       state.clients = dbClients || [];
-       state.accountants = dbAccountants || [];
-       state.logs = dbLogs || [];
-       state.campaigns = dbCampaigns || [];
+        state.users = dbUsers && dbUsers.length > 0 ? dbUsers : defaultUsers;
+        state.clients = dbClients || [];
+        state.accountants = dbAccountants || [];
+        state.logs = dbLogs || [];
+        state.campaigns = dbCampaigns || [];
+
+        // Carrega as metas do banco Supabase para a memória do sistema
+        if (dbGoals && dbGoals.length > 0) {
+            if (!state.monthlyGoals) state.monthlyGoals = {};
+            dbGoals.forEach(g => {
+                state.monthlyGoals[g.month_key] = {
+                    target: Number(g.target_value) || 0,
+                    achieved: Number(g.realized_value) || 0,
+                    realizedValue: Number(g.realized_value) || 0,
+                    salesCount: g.sales_count || 0,
+                    updatedAt: g.updated_at
+                };
+            });
+        }
 
         // Mantém configurações menores no LocalStorage (como Tema e Interface)
         const getLocal = (key, fallback) => { 
@@ -8263,26 +8277,25 @@ window.applyAnnualGoal = async function applyAnnualGoal() {
             // ============================================================
             //  CONTADOR DE VALOR REALIZADO DO MÊS ATUAL
             // ============================================================
-            function updateCurrentMonthAchieved() {
-                const now = new Date();
-                const currentMonth = now.getMonth();
-                const currentYear = now.getFullYear();
-                
-                const monthSales = state.clients.filter(c => {
-                    if (!c.purchaseDate) return false;
-                    const d = new Date(c.purchaseDate);
-                    return d.getMonth() === currentMonth && d.getFullYear() === currentYear && ['pago', 'emitido'].includes(c.stage);
-                });
-                
-                const totalAchieved = monthSales.reduce((sum, c) => sum + (Number(c.price) || 0), 0);
-                document.getElementById('current-month-achieved').textContent = formatCurrency(totalAchieved);
-                
-                const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-                if (state.monthlyGoals[currentMonthKey]) {
-                    state.monthlyGoals[currentMonthKey].achieved = totalAchieved;
-                    saveState();
-                }
-            }
+       function updateCurrentMonthAchieved() {
+    const el = document.getElementById('current-month-achieved');
+    if (!el) return; // Se não existir na tela, ignora e evita quebrar o sistema
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    const monthSales = (state.clients || []).filter(c => {
+        if (!c.purchaseDate) return false;
+        const d = new Date(c.purchaseDate);
+        return d.getMonth() === currentMonth && 
+               d.getFullYear() === currentYear && 
+               ['pago', 'emitido'].includes(c.stage);
+    });
+
+    const achieved = monthSales.reduce((acc, c) => acc + (Number(c.price) || 0), 0);
+    el.textContent = formatCurrency(achieved);
+}
 
             // ============================================================
             //  METAS - FUNÇÕES EXISTENTES
