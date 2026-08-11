@@ -7820,7 +7820,7 @@ function openChatSidebar() {
             // ============================================================
             //  METAS - PLANILHA MENSAL
             // ============================================================
-          function handleGoalSpreadsheetUpload(event) {
+         function handleGoalSpreadsheetUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -7837,28 +7837,35 @@ function openChatSidebar() {
                 return;
             }
 
-            // 1. Encontra a coluna correta priorizando "Valor total" no cabeçalho
             const headers = Object.keys(jsonData[0]);
-            const valueCol = headers.find(k => /valor\s*total/i.test(k)) ||
-                             headers.find(k => /faturamento/i.test(k)) ||
-                             headers.find(k => /^total$/i.test(k.trim())) ||
-                             headers.find(k => /valor|preco|price|venda|receita/i.test(k));
 
-            if (!valueCol) {
-                showToast('Coluna de valor/faturamento não encontrada na planilha.', 'error');
-                return;
-            }
+            // Helper para remover acentos, símbolos e quebras de linha do cabeçalho
+            const normalizeHeader = str => String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
-            // 2. Função blindada para converter qualquer formato brasileiro em número real
+            // 1. Busca agressiva por qualquer palavra-chave de valor financeiro
+            let valueCol = headers.find(k => {
+                const clean = normalizeHeader(k);
+                return clean.includes('valor') || 
+                       clean.includes('faturamento') || 
+                       clean.includes('total') || 
+                       clean.includes('preco') || 
+                       clean.includes('price') || 
+                       clean.includes('venda') || 
+                       clean.includes('receita') || 
+                       clean.includes('r$') || 
+                       clean.includes('pago') || 
+                       clean.includes('liquido') ||
+                       clean.includes('bruto');
+            });
+
+            // 2. Parser blindado para converter qualquer moeda brasileira (ex: 1.250,00 ou R$ 165,90)
             function parseBrazilianCurrency(val) {
                 if (val === null || val === undefined || val === '') return 0;
                 if (typeof val === 'number') return isNaN(val) ? 0 : val;
                 
                 let str = String(val).trim();
-                // Remove R$, letras e espaços invisíveis do Excel (\u00A0)
                 str = str.replace(/[R$\s\u00A0]/gi, '');
                 
-                // Se usar vírgula como decimal (ex: "1.234,56" ou "165,90")
                 if (str.includes(',')) {
                     str = str.replace(/\./g, '').replace(',', '.');
                 }
@@ -7867,10 +7874,36 @@ function openChatSidebar() {
                 return isNaN(num) ? 0 : num;
             }
 
+            // 3. FALLBACK INTELIGENTE: Se o cabeçalho tiver nome estranho, acha a coluna pelos números!
+            if (!valueCol) {
+                for (let k of headers) {
+                    const cleanKey = normalizeHeader(k);
+                    // Ignora colunas que são de telefone, CPF, CNPJ, data ou ID
+                    if (/cpf|cnpj|data|tel|phone|cel|id|cep/.test(cleanKey)) continue;
+
+                    // Verifica quantas linhas têm valores que parecem vendas reais (> R$ 10)
+                    const countNumbers = jsonData.filter(row => {
+                        const v = parseBrazilianCurrency(row[k]);
+                        return v > 10 && v < 1000000;
+                    }).length;
+
+                    // Se mais de 30% das linhas tiverem valores financeiros, encontramos a coluna!
+                    if (countNumbers >= Math.max(1, Math.floor(jsonData.length * 0.3))) {
+                        valueCol = k;
+                        break;
+                    }
+                }
+            }
+
+            if (!valueCol) {
+                showToast('Coluna de valor não encontrada. Verifique se a planilha contém os valores.', 'error');
+                return;
+            }
+
             let totalVendasPlanilha = 0;
             let countVendas = 0;
 
-            // 3. Soma linha por linha sem perder nenhum centavo nem truncar milhares
+            // 4. Soma todas as linhas válidas
             jsonData.forEach(row => {
                 const valorNum = parseBrazilianCurrency(row[valueCol]);
                 if (valorNum > 0) {
@@ -7879,7 +7912,7 @@ function openChatSidebar() {
                 }
             });
 
-            // 4. Identifica o mês selecionado no padrão YYYY-MM
+            // 5. Identifica o mês selecionado no padrão YYYY-MM
             const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
             let month = 0;
             if (activeMonthBtn) {
@@ -7889,11 +7922,7 @@ function openChatSidebar() {
             const year = now.getFullYear();
             const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            if (state.monthlyGoals[monthKey]) {
-                if (!confirm(`Já existe uma meta para ${monthKey}. Deseja substituir?`)) return;
-            }
-
-            // 5. Salva no estado e sincroniza o valor realizado
+            // 6. Salva e recria o mês no sistema
             state.monthlyGoals[monthKey] = {
                 target: totalVendasPlanilha,
                 achieved: totalVendasPlanilha,
@@ -7905,14 +7934,14 @@ function openChatSidebar() {
 
             saveState();
 
-            // 6. Recalcula os painéis e o abatimento anual na hora
+            // 7. Atualiza os cards e o abatimento anual
             if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
             if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
 
-            showToast(`✅ ${countVendas} clientes somados com sucesso: ${formatCurrency(totalVendasPlanilha)}!`);
+            showToast(`✅ Mês ${monthKey} importado com sucesso: ${formatCurrency(totalVendasPlanilha)} (${countVendas} vendas)!`);
         } catch (error) {
             console.error('Erro ao processar planilha:', error);
-            showToast('Erro ao processar os valores da planilha.', 'error');
+            showToast('Erro ao ler a estrutura do arquivo Excel.', 'error');
         }
     };
     reader.readAsArrayBuffer(file);
