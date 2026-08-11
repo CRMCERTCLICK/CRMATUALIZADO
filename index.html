@@ -7820,7 +7820,7 @@ function openChatSidebar() {
             // ============================================================
             //  METAS - PLANILHA MENSAL
             // ============================================================
-     async function handleGoalSpreadsheetUpload(event) {
+   async function handleGoalSpreadsheetUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -7831,8 +7831,8 @@ function openChatSidebar() {
             const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
             
-            // raw: true pega o valor numérico real da célula sem perdas de formatação
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: 0, raw: true });
+            // Lê como texto formatado para não perder precisão e converte manualmente
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
 
             if (!jsonData || jsonData.length === 0) {
                 showToast('A planilha está vazia.', 'error');
@@ -7840,25 +7840,16 @@ function openChatSidebar() {
             }
 
             const headers = Object.keys(jsonData[0]);
-            const normalizeHeader = str => String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
-            // 1. Procura a coluna de valor
-            let valueCol = headers.find(k => {
-                const clean = normalizeHeader(k);
-                return clean.includes('valor') || clean.includes('faturamento') || clean.includes('total') ||
-                       clean.includes('preco') || clean.includes('price') || clean.includes('receita');
-            });
-
-            // 2. Parser inteligente que funciona tanto para número puro quanto para texto
+            // PARSER UNIVERSAL PARA MOEDA BRASILEIRA
             function parseBrazilianCurrency(val) {
                 if (val === null || val === undefined || val === '') return 0;
-                // Se o Excel já entregou o número real (raw: true), retorna ele direto!
                 if (typeof val === 'number') return isNaN(val) ? 0 : val;
                 
-                let str = String(val).trim();
-                str = str.replace(/[R$\s\u00A0a-zA-Z:]/g, '');
+                let str = String(val).trim().replace(/[R$\s\u00A0a-zA-Z:]/g, '');
                 if (!str) return 0;
 
+                // Trata formato brasileiro (1.250,00) ou formato americano (1250.00)
                 if (str.includes(',') && str.includes('.')) {
                     str = str.replace(/\./g, '').replace(',', '.');
                 } else if (str.includes(',')) {
@@ -7869,47 +7860,52 @@ function openChatSidebar() {
                 return isNaN(num) ? 0 : num;
             }
 
-            // Fallback se o cabeçalho tiver nome desconhecido
-            if (!valueCol) {
-                for (let k of headers) {
-                    const cleanKey = normalizeHeader(k);
-                    if (/cpf|cnpj|data|tel|phone|cel|id|cep/.test(cleanKey)) continue;
-                    const countNumbers = jsonData.filter(row => parseBrazilianCurrency(row[k]) >= 10).length;
-                    if (countNumbers >= Math.floor(jsonData.length * 0.2)) {
-                        valueCol = k;
-                        break;
+            // SELECIONA A COLUNA QUE POSSUI A MAIOR SOMA FINANCEIRA NA PLANILHA
+            let bestCol = null;
+            let maxTotalSum = -1;
+
+            for (let col of headers) {
+                const cleanKey = String(col).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+                // Ignora colunas que não são valor financeiro
+                if (/cpf|cnpj|data|tel|phone|cel|id|cep|cep|qtd|quant/.test(cleanKey)) continue;
+
+                let colSum = 0;
+                let validCount = 0;
+
+                jsonData.forEach(row => {
+                    const firstColVal = String(Object.values(row)[0] || '').toLowerCase();
+                    if (firstColVal.includes('total') || firstColVal.includes('soma') || firstColVal.includes('subtotal')) return;
+
+                    const num = parseBrazilianCurrency(row[col]);
+                    if (num >= 5 && num <= 500000) {
+                        colSum += num;
+                        validCount++;
                     }
+                });
+
+                // Se pelo menos 20% da coluna tiver números e a soma for a maior encontrada, escolhe ela
+                if (validCount >= Math.floor(jsonData.length * 0.2) && colSum > maxTotalSum) {
+                    maxTotalSum = colSum;
+                    bestCol = col;
                 }
             }
 
-            if (!valueCol) {
-                showToast('Coluna de valor não encontrada na planilha.', 'error');
+            if (!bestCol || maxTotalSum <= 0) {
+                showToast('Não foi possível identificar valores financeiros na planilha.', 'error');
                 return;
             }
 
-            let totalVendasPlanilha = 0;
-            let countVendas = 0;
+            let totalVendasPlanilha = maxTotalSum;
+            let countVendas = jsonData.filter(r => parseBrazilianCurrency(r[bestCol]) >= 5).length;
 
-            // 3. Soma linha por linha
-            jsonData.forEach(row => {
-                const firstColValue = String(Object.values(row)[0] || '').toLowerCase();
-                if (firstColValue.includes('total') || firstColValue.includes('soma')) return;
-
-                const valorNum = parseBrazilianCurrency(row[valueCol]);
-                if (valorNum > 1 && valorNum < 500000) {
-                    totalVendasPlanilha += valorNum;
-                    countVendas++;
-                }
-            });
-
-            // 4. Identifica o mês selecionado
+            // Identifica o mês selecionado
             const activeMonthBtn = document.querySelector('.goal-month-selector .month-btn.active');
             let month = activeMonthBtn ? parseInt(activeMonthBtn.dataset.month) || 0 : 0;
             const now = new Date();
             const year = now.getFullYear();
             const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-            // 5. ATUALIZA NO SUPABASE SEM ERRO DE SILENCIAMENTO
+            // SALVA NO SUPABASE
             const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
             if (db && typeof db.from === 'function') {
                 try {
@@ -7922,15 +7918,13 @@ function openChatSidebar() {
                         updated_at: new Date().toISOString()
                     };
                     const { error } = await db.from('monthly_goals').upsert([payload]);
-                    if (error) {
-                        console.error("Erro detalhado do Supabase:", error);
-                    }
+                    if (error) console.error("Erro Supabase:", error);
                 } catch (err) {
-                    console.error("Erro na requisição ao Supabase:", err);
+                    console.error("Erro na comunicação com Supabase:", err);
                 }
             }
 
-            // 6. Atualiza o estado da aplicação
+            // ATUALIZA O ESTADO DO CRM
             state.monthlyGoals[monthKey] = {
                 target: totalVendasPlanilha,
                 achieved: totalVendasPlanilha,
@@ -7945,10 +7939,10 @@ function openChatSidebar() {
             if (typeof updateAnnualGoalDeduction === 'function') updateAnnualGoalDeduction();
             if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
 
-            showToast(`✅ ${countVendas} vendas somadas: ${formatCurrency(totalVendasPlanilha)}!`);
+            showToast(`✅ Coluna "${bestCol}" somada: ${formatCurrency(totalVendasPlanilha)}!`);
         } catch (error) {
             console.error('Erro ao processar planilha:', error);
-            showToast('Erro ao processar arquivo.', 'error');
+            showToast('Erro ao ler a planilha.', 'error');
         }
     };
     reader.readAsArrayBuffer(file);
