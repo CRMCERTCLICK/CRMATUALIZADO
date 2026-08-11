@@ -8052,41 +8052,72 @@ function openChatSidebar() {
             // ============================================================================
 // 1. MOTOR QUE SOMA TODOS OS MESES IMPORTADOS E ABATE DA META ANUAL
 // ============================================================================
+// ============================================================================
+// MOTOR DE ABATIMENTO ANUAL COM RECÁLCULO DINÂMICO DOS MESES SEGUINTES
+// ============================================================================
 window.updateAnnualGoalDeduction = function updateAnnualGoalDeduction() {
-    // Busca a meta anual configurada no campo ou salva na memória (padrão 750000)
     const inputAnual = document.getElementById('annual-goal-input');
     const metaAnual = parseFloat(inputAnual?.value) || 
                       parseFloat(localStorage.getItem('certclick_annual_target')) || 
                       750000;
 
-    let somaTodosOsMeses = 0;
+    const currentYear = new Date().getFullYear();
+    let totalArrecadadoAno = 0;
+    let mesesImportadosCount = 0;
 
-    // 1. Soma o valor realizado de TODOS os meses salvos em state.monthlyGoals
-    if (state.monthlyGoals) {
-        Object.values(state.monthlyGoals).forEach(mes => {
-            if (mes) {
-                // Tenta pegar realizedValue, achieved ou target do mês importado
-                const valMes = Number(mes.realizedValue || mes.achieved || mes.target) || 0;
-                somaTodosOsMeses += valMes;
-            }
-        });
+    // 1. Soma o faturamento real dos meses que JÁ TÊM planilha ou vendas realizadas
+    for (let m = 0; m < 12; m++) {
+        const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
+        const mesObj = state.monthlyGoals?.[monthKey];
+
+        if (mesObj && (Number(mesObj.realizedValue) > 0 || Number(mesObj.achieved) > 0 || Number(mesObj.salesCount) > 0)) {
+            const valMes = Number(mesObj.realizedValue || mesObj.achieved) || 0;
+            totalArrecadadoAno += valMes;
+            mesesImportadosCount++;
+        }
     }
 
-    // 2. Se houver vendas fechadas direto no CRM ('pago' ou 'emitido'), soma também
+    // 2. Soma vendas diretas do CRM (caso existam leads em 'pago'/'emitido' fora da planilha)
     const somaVendasCRM = (state.clients || [])
         .filter(c => ['pago', 'emitido'].includes(c.stage))
         .reduce((acc, c) => acc + (Number(c.price) || 0), 0);
 
-    // Usa o maior valor para evitar contagem duplicada caso o CRM já reflita a planilha
-    const totalArrecadadoAno = Math.max(somaTodosOsMeses, somaVendasCRM);
+    totalArrecadadoAno = Math.max(totalArrecadadoAno, somaVendasCRM);
 
-    // 3. Calcula quanto falta (nunca deixa ficar negativo visualmente)
+    // 3. Calcula o saldo restante para bater a meta anual
     const faltaAbater = Math.max(0, metaAnual - totalArrecadadoAno);
 
-    // 4. Percentual concluído do ano
+    // 4. RECÁLCULO DINÂMICO: Redistribui o saldo restante apenas entre os meses FUTUROS/pendentes
+    const mesesRestantes = Math.max(1, 12 - mesesImportadosCount);
+    const novaMetaMensalFutura = faltaAbater / mesesRestantes;
+
+    if (!state.monthlyGoals) state.monthlyGoals = {};
+
+    for (let m = 0; m < 12; m++) {
+        const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`;
+        const mesObj = state.monthlyGoals[monthKey];
+
+        // Se o mês ainda NÃO tem faturamento realizado, ele recebe a nova meta reduzida/recalculada
+        const jaRealizado = mesObj && (Number(mesObj.realizedValue) > 0 || Number(mesObj.achieved) > 0);
+        if (!jaRealizado) {
+            if (!state.monthlyGoals[monthKey]) {
+                state.monthlyGoals[monthKey] = {
+                    target: novaMetaMensalFutura,
+                    achieved: 0,
+                    realizedValue: 0,
+                    salesCount: 0,
+                    clients: []
+                };
+            } else {
+                state.monthlyGoals[monthKey].target = novaMetaMensalFutura;
+            }
+        }
+    }
+
+    // 5. Percentual geral de conclusão do ano
     const progressoAnual = metaAnual > 0 ? Math.min(100, Math.round((totalArrecadadoAno / metaAnual) * 100)) : 0;
 
-    // 5. Atualiza os elementos na tela
+    // 6. Atualiza a interface (cards do topo)
     const elTarget = document.getElementById('annual-target-display');
     const elRealized = document.getElementById('annual-realized-display');
     const elRemaining = document.getElementById('annual-remaining-display');
@@ -8098,10 +8129,16 @@ window.updateAnnualGoalDeduction = function updateAnnualGoalDeduction() {
     if (elRemaining) elRemaining.textContent = formatCurrency(faltaAbater);
     if (elProgressText) elProgressText.textContent = `${progressoAnual}%`;
     if (elProgressBar) elProgressBar.style.width = `${progressoAnual}%`;
+
+    // Atualiza a meta do mês atual em tempo real
+    const nowKey = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    if (state.monthlyGoals[nowKey] && typeof goalsState !== 'undefined') {
+        goalsState.monthlyTarget = state.monthlyGoals[nowKey].target;
+    }
 };
 
 // ============================================================================
-// 2. FUNÇÃO AO CLICAR NO BOTÃO "APLICAR" / "DISTRIBUIR"
+// BOTÃO APLICAR / DEFINIR META ANUAL
 // ============================================================================
 window.applyAnnualGoal = async function applyAnnualGoal() {
     const input = document.getElementById('annual-goal-input');
@@ -8111,14 +8148,12 @@ window.applyAnnualGoal = async function applyAnnualGoal() {
         return showToast('Digite um valor válido para a meta anual.', 'error');
     }
 
-    // Salva no LocalStorage
     localStorage.setItem('certclick_annual_target', valorAnual);
     if (typeof goalsState !== 'undefined') {
         goalsState.annualTarget = valorAnual;
-        goalsState.monthlyTarget = valorAnual / 12;
     }
 
-    // Tenta salvar no Supabase (se disponível)
+    // Salva na nuvem no Supabase (se disponível)
     const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
     if (db && typeof db.from === 'function') {
         try {
@@ -8133,10 +8168,12 @@ window.applyAnnualGoal = async function applyAnnualGoal() {
         }
     }
 
-    saveState();
+    // Dispara o recálculo que ajusta todos os meses e salva
     updateAnnualGoalDeduction();
+    saveState();
+    
     if (typeof renderMonthlyGoals === 'function') renderMonthlyGoals();
-    showToast(`✅ Meta anual de ${formatCurrency(valorAnual)} aplicada e redistribuída!`);
+    showToast(`✅ Meta anual de ${formatCurrency(valorAnual)} configurada com recálculo progressivo!`);
     if (typeof launchConfetti === 'function') launchConfetti();
 };
 
