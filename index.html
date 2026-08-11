@@ -5545,11 +5545,11 @@ async function fetchReceitaFederalBulk(data, type) {
                 if (message) showToast(message);
             }
 
-           function connectWhatsApp() {
-                abrirWhatsAppWebPopup();
-            }
+          window.connectWhatsApp = function connectWhatsApp() {
+                window.abrirWhatsAppWebPopup();
+            };
 
-            function abrirWhatsAppWebPopup() {
+            window.abrirWhatsAppWebPopup = function abrirWhatsAppWebPopup() {
                 const largura = 900;
                 const altura = 700;
 
@@ -5569,7 +5569,7 @@ async function fetchReceitaFederalBulk(data, type) {
                 } else {
                     showToast('Por favor, libere os pop-ups do navegador para abrir o WhatsApp.', 'error');
                 }
-            }
+            };
 
             function disconnectWhatsApp() {
                 if (state.whatsapp._qrTimeout) {
