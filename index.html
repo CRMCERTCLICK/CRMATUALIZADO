@@ -10285,99 +10285,121 @@ if (new URLSearchParams(window.location.search).get('reg') === 'contador') {
 }
 
 // ============================================================================
-// DETECÇÃO AUTOMÁTICA DE CADASTRO DE PARCEIRO VIA URL (?reg=contador)
+// PORTAL DO PARCEIRO DEDICADO VIA URL (?reg=contador)
 // ============================================================================
 window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     
-    // Se a URL contiver ?reg=contador, abre a aba "Criar Conta" automaticamente
+    // Se a URL contiver ?reg=contador, renderiza a página isolada do Parceiro
     if (params.get('reg') === 'contador') {
-        if (typeof toggleAccessMode === 'function') {
-            toggleAccessMode('register');
-        }
         
-        // Altera o título visual para o parceiro saber que está no lugar certo
-        const regForm = document.getElementById('register-form');
-        if (regForm && !document.getElementById('badge-parceiro-aviso')) {
-            const aviso = document.createElement('div');
-            aviso.id = 'badge-parceiro-aviso';
-            aviso.className = 'p-3 mb-3 bg-brand-500/15 border border-brand-500/30 rounded-xl text-center';
-            aviso.innerHTML = '<p class="text-xs font-bold text-brand-400"><i class="fas fa-handshake mr-1"></i> Cadastro de Parceiro / Contador</p>';
-            regForm.prepend(aviso);
-        }
+        // 1. Oculta tudo que é do sistema padrão (Splash, Login e o App)
+        const splash = document.getElementById('splash-screen');
+        if (splash) splash.style.display = 'none';
+        
+        const loginContainer = document.getElementById('login-container');
+        if (loginContainer) loginContainer.style.display = 'none';
+        
+        const mainApp = document.getElementById('main-app-container');
+        if (mainApp) mainApp.style.display = 'none';
+
+        // 2. Cria a tela exclusiva para o Parceiro (Separada do CRM)
+        const partnerContainer = document.createElement('div');
+        partnerContainer.id = 'partner-registration-fullscreen';
+        partnerContainer.className = 'fixed inset-0 bg-surface-darker flex items-center justify-center z-[99999] p-4';
+        partnerContainer.innerHTML = `
+            <div class="bg-surface-dark border border-slate-800 w-full max-w-md p-8 rounded-2xl shadow-elevated relative z-10 animate-slide-up">
+                
+                <!-- Cabeçalho do Parceiro -->
+                <div class="text-center space-y-2 mb-8">
+                    <div class="w-14 h-14 bg-amber-500 rounded-xl flex items-center justify-center text-surface-darker shadow-glow mx-auto mb-4">
+                        <i class="fas fa-handshake text-3xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-black text-white tracking-tight">Portal do Parceiro</h2>
+                    <p class="text-xs text-slate-400">Cadastre-se para indicar clientes e acompanhar suas comissões no <strong class="text-brand-500">CertClick</strong>.</p>
+                </div>
+
+                <!-- Formulário Exclusivo -->
+                <form id="standalone-partner-form" class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold mb-1.5 text-slate-400 uppercase tracking-wider">Nome Completo / Escritório <span class="text-rose-500">*</span></label>
+                        <input type="text" id="partner-name" placeholder="Ex: Contabilidade Silva" required class="w-full border border-slate-800 bg-slate-900 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none text-white transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold mb-1.5 text-slate-400 uppercase tracking-wider">CRC ou CNPJ</label>
+                        <input type="text" id="partner-crc" placeholder="Opcional" class="w-full border border-slate-800 bg-slate-900 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none text-white font-mono transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold mb-1.5 text-slate-400 uppercase tracking-wider">Celular (WhatsApp) <span class="text-rose-500">*</span></label>
+                        <input type="text" id="partner-phone" placeholder="(00) 00000-0000" oninput="if(typeof handleMask === 'function') handleMask(event, 'phone')" required class="w-full border border-slate-800 bg-slate-900 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 outline-none text-white font-mono transition-all">
+                    </div>
+
+                    <button type="button" onclick="submitStandalonePartner()" id="btn-submit-partner" class="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold rounded-xl shadow-glow transition-all text-sm mt-6 flex items-center justify-center">
+                        <i class="fas fa-check-circle mr-2"></i> Finalizar Cadastro
+                    </button>
+                </form>
+                
+                <!-- Mensagem de Sucesso (Oculta por padrão) -->
+                <div id="partner-success-msg" class="hidden text-center py-6 animate-fade-in">
+                    <i class="fas fa-check-circle text-6xl text-emerald-500 mb-4"></i>
+                    <h3 class="text-xl font-bold text-white mb-2">Cadastro Concluído!</h3>
+                    <p class="text-sm text-slate-400">Sua conta de parceiro foi criada com sucesso.<br>Em breve, nossa equipe entrará em contato pelo WhatsApp fornecido.</p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(partnerContainer);
     }
 });
 
 // ============================================================================
-// FUNÇÃO DE CADASTRO DIRETIONADO (PARCEIRO OU OPERADOR)
+// FUNÇÃO PARA SALVAR O PARCEIRO NO SUPABASE A PARTIR DA TELA DEDICADA
 // ============================================================================
-window.handleRegisterDirect = async function() {
+window.submitStandalonePartner = async function() {
     const db = window.supabaseClient || window.supabase;
     if (!db) {
-        alert("Erro: Conexão com o Supabase não encontrada.");
+        alert("Erro de conexão com o banco de dados. Tente novamente mais tarde.");
         return;
     }
 
-    const name = document.getElementById('register-name')?.value.trim();
-    const username = document.getElementById('register-username-input')?.value.trim();
-    const password = document.getElementById('register-password')?.value.trim();
+    const name = document.getElementById('partner-name').value.trim();
+    const crc = document.getElementById('partner-crc').value.trim();
+    const phone = document.getElementById('partner-phone').value.trim();
 
-    if (!name || !username || !password) {
-        if (typeof showToast === 'function') showToast("Preencha todos os campos!", "error");
-        else alert("Preencha todos os campos!");
+    if (!name || !phone) {
+        alert("Por favor, preencha o Nome e o Celular.");
         return;
     }
 
-    const params = new URLSearchParams(window.location.search);
-    const isParceiro = (params.get('reg') === 'contador');
+    const btn = document.getElementById('btn-submit-partner');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processando...';
+
+    // Cria o objeto idêntico ao que a aba Accountants do seu CRM utiliza
+    const newAccountant = {
+        id: 'acc-' + Date.now(),
+        name: name,
+        crc: crc || 'Pendente',
+        phone: phone,
+        syngularReferrals: 0,
+        syngularVouchers: []
+    };
 
     try {
-        if (isParceiro) {
-            // 1. SE VEIO PELO LINK ?reg=contador -> SALVA EM "ACCOUNTANTS" (PARCEIROS)
-            const newAccountant = {
-                id: 'acc-' + Date.now(),
-                name: name,
-                crc: 'Pendente',
-                phone: username, // Salva o contato inicial
-                syngularReferrals: 0,
-                syngularVouchers: []
-            };
+        // Envia direto para a tabela accountants no Supabase
+        const { error } = await db.from('accountants').insert([newAccountant]);
+        if (error) throw error;
 
-            const { error } = await db.from('accountants').insert([newAccountant]);
-            if (error) throw error;
+        // Oculta o formulário e exibe a mensagem de sucesso na tela isolada
+        document.getElementById('standalone-partner-form').classList.add('hidden');
+        document.getElementById('partner-success-msg').classList.remove('hidden');
 
-            if (typeof state !== 'undefined' && Array.isArray(state.accountants)) {
-                state.accountants.push(newAccountant);
-                if (typeof saveState === 'function') saveState();
-            }
-
-            alert("✅ Cadastro de Parceiro realizado com sucesso! Sua conta foi enviada para a Rede de Parceiros.");
-            window.location.href = window.location.pathname; // Limpa a URL
-        } else {
-            // 2. SE FOR CADASTRO NORMAL -> SALVA EM "USERS"
-            const newUser = {
-                id: 'u-' + Date.now(),
-                name: name,
-                username: username.toLowerCase(),
-                password: password,
-                role: 'operator'
-            };
-
-            const { error } = await db.from('users').insert([newUser]);
-            if (error) throw error;
-
-            if (typeof state !== 'undefined' && Array.isArray(state.users)) {
-                state.users.push(newUser);
-                if (typeof saveState === 'function') saveState();
-                state.currentUser = newUser;
-            }
-
-            alert("✅ Conta criada com sucesso!");
-            if (typeof enterApp === 'function') enterApp();
-        }
     } catch (err) {
-        console.error("Erro ao cadastrar:", err);
+        console.error("Erro ao cadastrar parceiro:", err);
         alert("Erro ao realizar cadastro: " + (err.message || err));
+        
+        // Volta o botão ao normal em caso de erro
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle mr-2"></i> Finalizar Cadastro';
     }
 };
 
