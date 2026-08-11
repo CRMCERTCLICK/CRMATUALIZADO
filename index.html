@@ -5058,14 +5058,22 @@ async function fetchReceitaFederalBulk(data, type) {
 }
 
   window.copyAccountantInviteLink = function() {
-    // Cria o link apontando para o seu CRM, mas com o código secreto do contador
-    const url = window.location.origin + window.location.pathname + "?reg=contador";
-    
-    navigator.clipboard.writeText(url).then(() => {
-        showToast("Link copiado com sucesso! Envie para o contador.", "success");
-    }).catch(err => {
+    // Link fixo apontando para o cadastro de parceiro no Vercel
+    const url = "https://certclickcrm.vercel.app/?reg=contador";
+
+    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            if (typeof showToast === 'function') {
+                showToast("Link de cadastro de parceiro copiado!", "success");
+            } else {
+                alert("Link copiado com sucesso!\n\n" + url);
+            }
+        }).catch(() => {
+            prompt("Copie o link abaixo para enviar ao parceiro:", url);
+        });
+    } else {
         prompt("Copie o link abaixo para enviar ao parceiro:", url);
-    });
+    }
 };
 
             // ============================================================
@@ -10276,6 +10284,102 @@ if (new URLSearchParams(window.location.search).get('reg') === 'contador') {
     }, 200);
 }
 
+// ============================================================================
+// DETECÇÃO AUTOMÁTICA DE CADASTRO DE PARCEIRO VIA URL (?reg=contador)
+// ============================================================================
+window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    
+    // Se a URL contiver ?reg=contador, abre a aba "Criar Conta" automaticamente
+    if (params.get('reg') === 'contador') {
+        if (typeof toggleAccessMode === 'function') {
+            toggleAccessMode('register');
+        }
+        
+        // Altera o título visual para o parceiro saber que está no lugar certo
+        const regForm = document.getElementById('register-form');
+        if (regForm && !document.getElementById('badge-parceiro-aviso')) {
+            const aviso = document.createElement('div');
+            aviso.id = 'badge-parceiro-aviso';
+            aviso.className = 'p-3 mb-3 bg-brand-500/15 border border-brand-500/30 rounded-xl text-center';
+            aviso.innerHTML = '<p class="text-xs font-bold text-brand-400"><i class="fas fa-handshake mr-1"></i> Cadastro de Parceiro / Contador</p>';
+            regForm.prepend(aviso);
+        }
+    }
+});
+
+// ============================================================================
+// FUNÇÃO DE CADASTRO DIRETIONADO (PARCEIRO OU OPERADOR)
+// ============================================================================
+window.handleRegisterDirect = async function() {
+    const db = window.supabaseClient || window.supabase;
+    if (!db) {
+        alert("Erro: Conexão com o Supabase não encontrada.");
+        return;
+    }
+
+    const name = document.getElementById('register-name')?.value.trim();
+    const username = document.getElementById('register-username-input')?.value.trim();
+    const password = document.getElementById('register-password')?.value.trim();
+
+    if (!name || !username || !password) {
+        if (typeof showToast === 'function') showToast("Preencha todos os campos!", "error");
+        else alert("Preencha todos os campos!");
+        return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const isParceiro = (params.get('reg') === 'contador');
+
+    try {
+        if (isParceiro) {
+            // 1. SE VEIO PELO LINK ?reg=contador -> SALVA EM "ACCOUNTANTS" (PARCEIROS)
+            const newAccountant = {
+                id: 'acc-' + Date.now(),
+                name: name,
+                crc: 'Pendente',
+                phone: username, // Salva o contato inicial
+                syngularReferrals: 0,
+                syngularVouchers: []
+            };
+
+            const { error } = await db.from('accountants').insert([newAccountant]);
+            if (error) throw error;
+
+            if (typeof state !== 'undefined' && Array.isArray(state.accountants)) {
+                state.accountants.push(newAccountant);
+                if (typeof saveState === 'function') saveState();
+            }
+
+            alert("✅ Cadastro de Parceiro realizado com sucesso! Sua conta foi enviada para a Rede de Parceiros.");
+            window.location.href = window.location.pathname; // Limpa a URL
+        } else {
+            // 2. SE FOR CADASTRO NORMAL -> SALVA EM "USERS"
+            const newUser = {
+                id: 'u-' + Date.now(),
+                name: name,
+                username: username.toLowerCase(),
+                password: password,
+                role: 'operator'
+            };
+
+            const { error } = await db.from('users').insert([newUser]);
+            if (error) throw error;
+
+            if (typeof state !== 'undefined' && Array.isArray(state.users)) {
+                state.users.push(newUser);
+                if (typeof saveState === 'function') saveState();
+                state.currentUser = newUser;
+            }
+
+            alert("✅ Conta criada com sucesso!");
+            if (typeof enterApp === 'function') enterApp();
+        }
+    } catch (err) {
+        console.error("Erro ao cadastrar:", err);
+        alert("Erro ao realizar cadastro: " + (err.message || err));
+    }
+};
 
     </script>
 </body>
