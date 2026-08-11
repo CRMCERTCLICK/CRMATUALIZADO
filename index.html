@@ -2293,6 +2293,39 @@
         </div>
     </div>
 
+    <!-- Modal de Controle Granular de Permissões (Exclusivo Dev) -->
+<div id="permissions-modal" class="fixed inset-0 modal-backdrop z-[65] items-center justify-center hidden p-4" onmousedown="if(event.target === this) closePermissionsModal()">
+    <div class="bg-surface-dark rounded-2xl border border-slate-800 w-full max-w-lg shadow-elevated overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
+        <div class="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
+            <div>
+                <h3 class="font-extrabold text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                    <i class="fas fa-user-lock text-brand-500"></i> Permissões de Módulos
+                </h3>
+                <p class="text-[10px] text-slate-400 mt-0.5">Usuário: <span id="perm-user-name" class="font-bold text-white">---</span></p>
+            </div>
+            <button onclick="closePermissionsModal()" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-5 overflow-y-auto flex-1 text-xs">
+            <input type="hidden" id="perm-user-id">
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Selecione as abas liberadas:</span>
+                <div class="flex gap-2">
+                    <button type="button" onclick="toggleAllPermissions(true)" class="text-[10px] text-brand-400 hover:underline font-bold">Marcar Todas</button>
+                    <button type="button" onclick="toggleAllPermissions(false)" class="text-[10px] text-rose-400 hover:underline font-bold">Desmarcar</button>
+                </div>
+            </div>
+            <div id="permissions-checkbox-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <!-- Checkboxes gerados dinamicamente via JS -->
+            </div>
+        </div>
+        <div class="p-4 border-t border-slate-800 flex justify-end gap-2 bg-slate-950 shrink-0">
+            <button onclick="closePermissionsModal()" class="px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-800 font-semibold text-xs">Cancelar</button>
+            <button onclick="saveUserPermissions()" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-surface-dark font-bold rounded-lg transition text-xs shadow-glow">
+                <i class="fas fa-save mr-1"></i> Salvar Permissões
+            </button>
+        </div>
+    </div>
+</div>
     <!-- Floating Chat Box -->
     <div id="floating-chat-box" class="fixed bottom-6 right-6 z-[80] w-80 bg-surface-dark border border-slate-800 rounded-2xl shadow-elevated overflow-hidden hidden transition-all duration-200 transform translate-y-10 opacity-0 flex-col">
         <div class="p-3 bg-brand-600 flex justify-between items-center text-white border-b border-brand-700">
@@ -3654,45 +3687,56 @@ function subscribeSupabaseRealtime() {
             //  SIDEBAR
             // ============================================================
             function buildSidebarMenu() {
-                const nav = document.getElementById('sidebar-nav');
-                const tabs = [
-                    { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-pie' },
-                    { id: 'clients', label: 'Clientes', icon: 'fa-user-group' },
-                    { id: 'pipeline', label: 'Kanban', icon: 'fa-columns' },
-                    { id: 'accountants', label: 'Parceiros', icon: 'fa-building' },
-                    { id: 'biometry', label: 'Biometria', icon: 'fa-fingerprint' },
-                    { id: 'reports', label: 'Relatórios', icon: 'fa-file-invoice-dollar' },
-                    { id: 'graphic-reports', label: 'Gráficos', icon: 'fa-chart-line' },
-                    { id: 'ai-analysis', label: 'Terminal IA', icon: 'fa-terminal', highlight: true },
-                    { id: 'whatsapp', label: 'WhatsApp', icon: 'fa-message', highlightGreen: true },
-                    { id: 'email', label: 'E-mail', icon: 'fa-envelope', highlightBlue: true },
-                    { id: 'chrome', label: 'Cliente Finalizado', icon: 'fa-check-circle', highlightGreen: true },
-                    { id: 'goals', label: 'Metas', icon: 'fa-trophy', highlight: true },
-                    { id: 'renewals', label: 'Renovações', icon: 'fa-sync-alt' },
-                    { id: 'renewal-comparison', label: 'Renovações Anuais', icon: 'fa-calendar-alt', highlight: true },
-                    { id: 'financial', label: 'Financeiro', icon: 'fa-coins' },
-                    { id: 'access-control', label: 'Permissões', icon: 'fa-shield-halved' },
-                    { id: 'daily-report', label: 'Relatório Diário', icon: 'fa-calendar-day', highlight: true },
-                    { id: 'chat', label: 'Chat', icon: 'fa-comment-dots', highlight: true }
-                ];
-                const allowed = {
-                    developer: tabs.map(t => t.id),
-                    admin: tabs.map(t => t.id),
-                    supervisor: ['dashboard', 'clients', 'pipeline', 'accountants', 'biometry', 'reports',
-                        'graphic-reports', 'ai-analysis', 'whatsapp', 'email', 'chrome', 'goals', 'renewals',
-                        'renewal-comparison', 'financial', 'daily-report', 'chat'
-                    ],
-                    operator: ['dashboard', 'clients', 'pipeline', 'biometry', 'whatsapp', 'email', 'chrome',
-                        'goals', 'renewals', 'renewal-comparison', 'financial', 'daily-report', 'chat'
-                    ]
-                } [state.currentUser.role] || ['dashboard', 'clients', 'pipeline', 'biometry', 'chat'];
-                nav.innerHTML = tabs.filter(t => allowed.includes(t.id)).map(tab => {
-                    let colorClass = tab.highlight ? "text-brand-400" : (tab.highlightGreen ?
-                        "text-emerald-500" : (tab.highlightBlue ? "text-blue-500" :
-                        "text-slate-500"));
-                    return `<button onclick="switchTab('${tab.id}')" id="btn-${tab.id}" class="nav-btn w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800/40 hover:text-white transition-all text-xs font-semibold"><i class="fas ${tab.icon} w-4 h-4 text-center ${colorClass}"></i><span>${tab.label}</span></button>`;
-                }).join('');
-            }
+    const nav = document.getElementById('sidebar-nav');
+    if (!nav || !state.currentUser) return;
+
+    const tabs = [
+        { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-pie' },
+        { id: 'clients', label: 'Clientes', icon: 'fa-user-group' },
+        { id: 'pipeline', label: 'Kanban', icon: 'fa-columns' },
+        { id: 'accountants', label: 'Parceiros', icon: 'fa-building' },
+        { id: 'biometry', label: 'Biometria', icon: 'fa-fingerprint' },
+        { id: 'reports', label: 'Relatórios', icon: 'fa-file-invoice-dollar' },
+        { id: 'graphic-reports', label: 'Gráficos', icon: 'fa-chart-line' },
+        { id: 'ai-analysis', label: 'Terminal IA', icon: 'fa-terminal', highlight: true },
+        { id: 'whatsapp', label: 'WhatsApp', icon: 'fa-message', highlightGreen: true },
+        { id: 'email', label: 'E-mail', icon: 'fa-envelope', highlightBlue: true },
+        { id: 'chrome', label: 'Cliente Finalizado', icon: 'fa-check-circle', highlightGreen: true },
+        { id: 'goals', label: 'Metas', icon: 'fa-trophy', highlight: true },
+        { id: 'renewals', label: 'Renovações', icon: 'fa-sync-alt' },
+        { id: 'renewal-comparison', label: 'Renovações Anuais', icon: 'fa-calendar-alt', highlight: true },
+        { id: 'financial', label: 'Financeiro', icon: 'fa-coins' },
+        { id: 'access-control', label: 'Permissões', icon: 'fa-shield-halved' },
+        { id: 'daily-report', label: 'Relatório Diário', icon: 'fa-calendar-day', highlight: true },
+        { id: 'chat', label: 'Chat', icon: 'fa-comment-dots', highlight: true }
+    ];
+
+    // Se o usuário tiver permissão customizada (allowedTabs), usa ela; senão, usa o padrão por cargo
+    let allowed = state.currentUser.allowedTabs;
+    if (!allowed || !Array.isArray(allowed)) {
+        allowed = getDefaultTabsForRole(state.currentUser.role);
+    }
+
+    // Garante que o Developer SEMPRE tenha acesso à aba de Permissões (access-control)
+    if (state.currentUser.role === 'developer' && !allowed.includes('access-control')) {
+        allowed.push('access-control');
+    }
+
+    nav.innerHTML = tabs
+        .filter(t => allowed.includes(t.id))
+        .map(tab => {
+            let colorClass = tab.highlight ? "text-brand-400" : 
+                            (tab.highlightGreen ? "text-emerald-500" : 
+                            (tab.highlightBlue ? "text-blue-500" : "text-slate-500"));
+            const isActive = state.currentTab === tab.id;
+            return `
+                <button onclick="switchTab('${tab.id}')" id="btn-${tab.id}" class="nav-btn w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800/40 hover:text-white transition-all text-xs font-semibold ${isActive ? 'active bg-brand-500/10 text-brand-500 font-bold' : ''}">
+                    <i class="fas ${tab.icon} w-4 h-4 text-center ${colorClass}"></i>
+                    <span>${tab.label}</span>
+                </button>
+            `;
+        }).join('');
+}
 
             function toggleMobileSidebar() {
                 document.getElementById('sidebar-panel').classList.toggle('hidden');
@@ -6041,15 +6085,157 @@ async function fetchReceitaFederalBulk(data, type) {
             //  USERS
             // ============================================================
             function renderUsersTable() {
-                const tbody = document.getElementById('users-table-tbody');
-                if (!tbody) return;
-                tbody.innerHTML = state.users.map(u => {
-                    const delBtn = (u.role !== 'developer' && u.username !== state.currentUser.username) ?
-                        `<button onclick="deleteUser('${u.id}')" class="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded transition-colors"><i class="fas fa-trash"></i></button>` :
-                        '';
-                    return `<tr class="hover:bg-slate-800/30 transition-colors border-b border-slate-800"><td class="p-3 font-bold text-slate-100">${escapeHTML(u.name)}</td><td class="p-3 font-mono text-slate-350">${escapeHTML(u.username)}</td><td class="p-3"><span class="text-[10px] font-bold px-2 py-1 rounded bg-slate-900 ${getRoleBadgeClass(u.role)} uppercase">${getRoleLabel(u.role)}</span></td><td class="p-3 text-right space-x-1">${(u.role !== 'developer' || state.currentUser.role === 'developer') ? `<button onclick="openUserModal('${u.id}')" class="p-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors"><i class="fas fa-edit"></i></button>` : ''}${delBtn}</td></tr>`;
-                }).join('');
-            }
+    const tbody = document.getElementById('users-table-tbody');
+    if (!tbody) return;
+
+    if (!state.users || !state.users.length) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-slate-500 italic">Nenhum usuário encontrado.</td></tr>`;
+        return;
+    }
+
+    const isDev = state.currentUser && state.currentUser.role === 'developer';
+
+    tbody.innerHTML = state.users.map(u => {
+        const badgeClass = getRoleBadgeClass(u.role);
+        const roleLabel = getRoleLabel(u.role);
+
+        // Botão de permissões granular (apenas Dev visualiza e configura os outros)
+        const permBtn = (isDev && u.role !== 'developer') 
+            ? `<button onclick="openPermissionsModal('${u.id}')" class="px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg font-bold text-[10px] transition-all inline-flex items-center gap-1" title="Configurar abas permitidas">
+                 <i class="fas fa-key"></i> Permissões
+               </button>`
+            : '';
+
+        const editBtn = `<button onclick="openUserModal('${u.id}')" class="p-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors" title="Editar"><i class="fas fa-edit"></i></button>`;
+        const delBtn = (u.role !== 'developer' && u.username !== state.currentUser.username) 
+            ? `<button onclick="deleteUser('${u.id}')" class="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded transition-colors" title="Remover"><i class="fas fa-trash"></i></button>`
+            : '';
+
+        return `
+            <tr class="hover:bg-slate-800/30 transition-colors border-b border-slate-800">
+                <td class="p-3">
+                    <p class="font-bold text-slate-100">${escapeHTML(u.name)}</p>
+                    <p class="text-[9px] text-slate-500">${escapeHTML(u.email || '-')}</p>
+                </td>
+                <td class="p-3 font-mono text-slate-300">${escapeHTML(u.username)}</td>
+                <td class="p-3">
+                    <span class="text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded ${badgeClass} bg-slate-950 inline-block">${roleLabel}</span>
+                </td>
+                <td class="p-3 text-right space-x-1.5 whitespace-nowrap">
+                    ${permBtn}
+                    ${editBtn}
+                    ${delBtn}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+// ============================================================================
+// GESTÃO GRANULAR DE PERMISSÕES POR USUÁRIO (EXCLUSIVO DEV)
+// ============================================================================
+
+const CRM_AVAILABLE_TABS = [
+    { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-pie' },
+    { id: 'clients', label: 'Clientes / Leads', icon: 'fa-user-group' },
+    { id: 'pipeline', label: 'Kanban (Funil)', icon: 'fa-columns' },
+    { id: 'accountants', label: 'Rede de Parceiros', icon: 'fa-building' },
+    { id: 'biometry', label: 'Validação Biométrica', icon: 'fa-fingerprint' },
+    { id: 'reports', label: 'Relatórios Financeiros', icon: 'fa-file-invoice-dollar' },
+    { id: 'graphic-reports', label: 'Gráficos e Evolução', icon: 'fa-chart-line' },
+    { id: 'ai-analysis', label: 'Terminal Consultor IA', icon: 'fa-terminal' },
+    { id: 'whatsapp', label: 'WhatsApp Web', icon: 'fa-message' },
+    { id: 'email', label: 'E-mail Marketing', icon: 'fa-envelope' },
+    { id: 'chrome', label: 'Cliente Finalizado', icon: 'fa-check-circle' },
+    { id: 'goals', label: 'Metas e Comissões', icon: 'fa-trophy' },
+    { id: 'renewals', label: 'Renovações Simples', icon: 'fa-sync-alt' },
+    { id: 'renewal-comparison', label: 'Renovações Anuais (Comparativo)', icon: 'fa-calendar-alt' },
+    { id: 'financial', label: 'Gestão Financeira', icon: 'fa-coins' },
+    { id: 'daily-report', label: 'Relatório Diário', icon: 'fa-calendar-day' },
+    { id: 'chat', label: 'Chat Interno', icon: 'fa-comment-dots' }
+];
+
+window.openPermissionsModal = function openPermissionsModal(userId) {
+    if (state.currentUser?.role !== 'developer') {
+        return showToast('Apenas o Developer pode gerenciar permissões de módulos.', 'error');
+    }
+
+    const user = state.users.find(u => u.id === userId);
+    if (!user) return showToast('Usuário não encontrado.', 'error');
+
+    document.getElementById('perm-user-id').value = user.id;
+    document.getElementById('perm-user-name').textContent = `${user.name} (@${user.username})`;
+
+    const currentAllowed = user.allowedTabs || getDefaultTabsForRole(user.role);
+
+    const grid = document.getElementById('permissions-checkbox-grid');
+    grid.innerHTML = CRM_AVAILABLE_TABS.map(tab => {
+        const isChecked = currentAllowed.includes(tab.id);
+        return `
+            <label class="flex items-center gap-2.5 p-2.5 bg-slate-900/80 hover:bg-slate-800/60 rounded-xl border border-slate-800 cursor-pointer transition-colors">
+                <input type="checkbox" value="${tab.id}" class="perm-tab-checkbox accent-brand-500 w-4 h-4 cursor-pointer" ${isChecked ? 'checked' : ''}>
+                <i class="fas ${tab.icon} text-slate-400 text-xs w-4 text-center"></i>
+                <span class="text-xs text-slate-200 font-medium select-none">${tab.label}</span>
+            </label>
+        `;
+    }).join('');
+
+    const modal = document.getElementById('permissions-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+window.closePermissionsModal = function closePermissionsModal() {
+    const modal = document.getElementById('permissions-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+};
+
+window.toggleAllPermissions = function toggleAllPermissions(check) {
+    document.querySelectorAll('.perm-tab-checkbox').forEach(cb => {
+        cb.checked = check;
+    });
+};
+
+window.saveUserPermissions = async function saveUserPermissions() {
+    const userId = document.getElementById('perm-user-id').value;
+    const user = state.users.find(u => u.id === userId);
+    if (!user) return;
+
+    const selectedTabs = Array.from(document.querySelectorAll('.perm-tab-checkbox:checked')).map(cb => cb.value);
+
+    if (selectedTabs.length === 0) {
+        return showToast('Selecione pelo menos um módulo para o usuário acessar.', 'error');
+    }
+
+    user.allowedTabs = selectedTabs;
+
+    const db = window.supabaseClient || (typeof getSupabase === 'function' ? getSupabase() : null) || window.supabase;
+    if (db && typeof db.from === 'function') {
+        try {
+            await db.from('users').update({ allowed_tabs: selectedTabs }).eq('id', userId);
+        } catch (err) {
+            console.warn('Supabase update aviso (salvando localmente):', err);
+        }
+    }
+
+    saveState();
+    closePermissionsModal();
+    showToast(`✅ Permissões de ${user.name} atualizadas com sucesso!`);
+
+    if (state.currentUser?.id === userId) {
+        state.currentUser.allowedTabs = selectedTabs;
+        buildSidebarMenu();
+    }
+};
+
+function getDefaultTabsForRole(role) {
+    const allIds = CRM_AVAILABLE_TABS.map(t => t.id).concat(['access-control']);
+    if (role === 'developer' || role === 'admin') return allIds;
+    if (role === 'supervisor') {
+        return ['dashboard', 'clients', 'pipeline', 'accountants', 'biometry', 'reports', 'graphic-reports', 'ai-analysis', 'whatsapp', 'email', 'chrome', 'goals', 'renewals', 'renewal-comparison', 'financial', 'daily-report', 'chat'];
+    }
+    return ['dashboard', 'clients', 'pipeline', 'biometry', 'whatsapp', 'email', 'chrome', 'goals', 'renewals', 'renewal-comparison', 'financial', 'daily-report', 'chat'];
+}
 
             function openUserModal(id) {
                 const m = document.getElementById('user-modal');
